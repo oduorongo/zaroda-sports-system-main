@@ -1,0 +1,1 @@
+ALTER TYPE competition_tier ADD VALUE IF NOT EXISTS 'ward';

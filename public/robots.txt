@@ -1,0 +1,62 @@
+# Zaroda Sports - robots.txt
+# Only allow indexing of main public pages
+
+# Google
+User-agent: Googlebot
+Allow: /$
+Allow: /pricing$
+Allow: /contact$
+Allow: /championships$
+Allow: /about$
+Disallow: /game/
+Disallow: /games/
+Disallow: /heat/
+Disallow: /heats/
+Disallow: /participant/
+Disallow: /participants/
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /login
+Disallow: /register
+Disallow: /signup
+Disallow: /auth/
+Disallow: /settings/
+Disallow: /notifications/
+Crawl-delay: 10
+
+# Bing
+User-agent: Bingbot
+Allow: /$
+Allow: /pricing$
+Allow: /contact$
+Allow: /championships$
+Disallow: /game/
+Disallow: /games/
+Disallow: /heat/
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /login
+Disallow: /auth/
+Crawl-delay: 10
+
+# Social media crawlers - allow all for previews
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+# All other crawlers
+User-agent: *
+Allow: /$
+Disallow: /game/
+Disallow: /games/
+Disallow: /heat/
+Disallow: /participant/
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /login
+Disallow: /auth/
+
+# Sitemap
+Sitemap: https://zarodasports.live/sitemap.xml

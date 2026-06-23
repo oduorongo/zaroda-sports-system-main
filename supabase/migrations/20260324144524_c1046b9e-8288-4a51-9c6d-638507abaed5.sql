@@ -1,0 +1,1 @@
+ALTER TABLE public.championships ADD COLUMN IF NOT EXISTS school_level public.school_level NOT NULL DEFAULT 'primary'::public.school_level;
