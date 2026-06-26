@@ -10,12 +10,12 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
-    // Allows Render hosts if running in dev mode on Render
-    allowedHosts: ["zaroda-sports-system-main.onrender.com"],
+    // Allows Render hosts if running in dev mode 
+    allowedHosts: ["zaroda-sports-system-main.onrender.com", "zarodasports.live", "www.zarodasports.live"],
   },
   preview: {
     // Fixes the Render deployment block
-    allowedHosts: ["zaroda-sports-system-main.onrender.com"],
+    allowedHosts: ["zaroda-sports-system-main.onrender.com", "zarodasports.live", "www.zarodasports.live"],
   },
   plugins: [react()].filter(Boolean),
   resolve: {
