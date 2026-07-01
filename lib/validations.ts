@@ -1,0 +1,197 @@
+import { z } from "zod";
+
+export const accountTypeSchema = z.enum(["SCHOOL", "OPEN_TOURNAMENT"]);
+export const gameCategorySchema = z.enum(["BALL_GAMES", "ATHLETICS", "MUSIC", "OTHER_GAMES"]);
+export const levelSchema = z.enum(["BASE", "ZONE", "SUB_COUNTY", "COUNTY", "REGIONAL", "NATIONAL"]);
+export const schoolLevelSchema = z.enum(["PRIMARY", "JUNIOR_SECONDARY", "SECONDARY"]);
+export const genderSchema = z.enum(["BOYS", "GIRLS", "MIXED"]);
+export const participantStatusSchema = z.enum(["REGISTERED", "CONFIRMED_IN_CALL_ROOM", "DISQUALIFIED"]);
+
+const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .regex(/[A-Z]/, "Password must contain an uppercase letter")
+  .regex(/[0-9]/, "Password must contain a number");
+
+export const signupSchema = z
+  .object({
+    accountType: accountTypeSchema,
+    organizationName: z.string().min(2, "Organization name is required").max(200),
+    contactName: z.string().min(2, "Contact name is required").max(200),
+    email: z.string().email("Enter a valid email"),
+    phone: z.string().min(7, "Enter a valid phone number").max(20),
+    county: z.string().min(1, "Select a county"),
+    subcounty: z.string().min(1, "Select a sub-county"),
+    gameCategory: gameCategorySchema,
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+export type SignupInput = z.infer<typeof signupSchema>;
+
+export const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1, "Password is required"),
+});
+export type LoginInput = z.infer<typeof loginSchema>;
+
+export const championshipCreateSchema = z.object({
+  name: z.string().min(3).max(200),
+  level: levelSchema,
+  schoolLevel: schoolLevelSchema,
+  category: gameCategorySchema,
+  county: z.string().min(1),
+  location: z.string().min(1),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+  isPublished: z.boolean().default(false),
+}).refine((data) => data.endDate >= data.startDate, {
+  message: "End date must be after start date",
+  path: ["endDate"],
+});
+export type ChampionshipCreateInput = z.infer<typeof championshipCreateSchema>;
+
+export const gameCreateSchema = z.object({
+  championshipId: z.string().uuid(),
+  name: z.string().min(2).max(200),
+  category: gameCategorySchema,
+  gender: genderSchema,
+  schoolLevel: schoolLevelSchema,
+  isTimed: z.boolean(),
+  maxQualifiers: z.number().int().min(1).max(50).default(5),
+  raceType: z.string().max(100).nullable().optional(),
+  scheduledDate: z.coerce.date().nullable().optional(),
+  isPrimaryJunior: z.boolean().default(false),
+});
+export type GameCreateInput = z.infer<typeof gameCreateSchema>;
+
+export const participantCreateSchema = z.object({
+  championshipId: z.string().uuid(),
+  gameId: z.string().uuid(),
+  schoolId: z.string().uuid().nullable().optional(),
+  tournamentTeamId: z.string().uuid().nullable().optional(),
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  gender: genderSchema,
+  dateOfBirth: z.coerce.date().nullable().optional(),
+  bibNumber: z.number().int().positive().optional(),
+  personalBest: z.string().max(20).nullable().optional(),
+  notes: z.string().max(1000).nullable().optional(),
+});
+export type ParticipantCreateInput = z.infer<typeof participantCreateSchema>;
+
+const timeInputRegex = /^(\d+(\.\d+)?|\d+:[0-5]?\d(\.\d+)?)$/;
+export const timeInputSchema = z
+  .string()
+  .regex(timeInputRegex, 'Time must be like "12.06", "0:12.06", or "1:23.45"');
+
+export const resultEntrySchema = z.object({
+  participantId: z.string().uuid(),
+  timeInput: timeInputSchema.optional(),
+  score: z.number().optional(),
+  position: z.number().int().positive().optional(),
+});
+export type ResultEntryInput = z.infer<typeof resultEntrySchema>;
+
+export const bibRangeSchema = z.object({
+  championshipId: z.string().uuid(),
+  schoolId: z.string().uuid(),
+  rangeStart: z.number().int().positive(),
+  rangeEnd: z.number().int().positive(),
+}).refine((data) => data.rangeEnd >= data.rangeStart, {
+  message: "rangeEnd must be >= rangeStart",
+  path: ["rangeEnd"],
+});
+export type BibRangeInput = z.infer<typeof bibRangeSchema>;
+
+export const circularSchema = z.object({
+  title: z.string().min(2).max(200),
+  content: z.string().min(1).max(20000),
+  senderName: z.string().min(1).max(200),
+  senderRole: z.string().max(100).default("National Admin"),
+  targetLevel: levelSchema.default("NATIONAL"),
+  isPublished: z.boolean().default(true),
+  documentUrl: z.string().url().nullable().optional(),
+});
+export type CircularInput = z.infer<typeof circularSchema>;
+
+export const adminMessageSchema = z.object({
+  recipientId: z.string().uuid().nullable().optional(),
+  parentId: z.string().uuid().nullable().optional(),
+  subject: z.string().min(1).max(200),
+  body: z.string().min(1).max(10000),
+  isBroadcast: z.boolean().default(false),
+});
+export type AdminMessageInput = z.infer<typeof adminMessageSchema>;
+
+export const contactFormSchema = z.object({
+  name: z.string().min(2).max(200),
+  email: z.string().email(),
+  phone: z.string().max(20).optional(),
+  subject: z.string().min(2).max(200),
+  message: z.string().min(5).max(5000),
+});
+export type ContactFormInput = z.infer<typeof contactFormSchema>;
+
+export const paymentInitializeSchema = z.object({
+  mode: z.enum(["subscription", "team_fee"]),
+  planId: z.string().uuid().optional(),
+  championshipId: z.string().uuid().optional(),
+  teamId: z.string().uuid().optional(),
+  teamName: z.string().min(1).max(200).optional(),
+  teamCode: z.string().min(1).max(50).optional(),
+  contactEmail: z.string().email().optional(),
+  contactName: z.string().max(200).optional(),
+  contactPhone: z.string().max(20).optional(),
+  feeId: z.string().uuid().optional(),
+});
+export type PaymentInitializeInput = z.infer<typeof paymentInitializeSchema>;
+
+export const paymentVerifySchema = z.object({
+  reference: z.string().min(1),
+});
+
+export const tournamentTeamSchema = z.object({
+  championshipId: z.string().uuid(),
+  name: z.string().min(1).max(200),
+  teamCode: z.string().min(1).max(50),
+  teamColor: z.string().max(30).nullable().optional(),
+  contactName: z.string().max(200).nullable().optional(),
+  contactEmail: z.string().email().nullable().optional(),
+  contactPhone: z.string().max(20).nullable().optional(),
+  notes: z.string().max(1000).nullable().optional(),
+});
+export type TournamentTeamInput = z.infer<typeof tournamentTeamSchema>;
+
+export const matchPoolSchema = z.object({
+  gameId: z.string().uuid(),
+  roundName: z.string().max(100).default("Round 1"),
+  teamAId: z.string().uuid(),
+  teamBId: z.string().uuid(),
+  teamAScore: z.number().int().min(0).nullable().optional(),
+  teamBScore: z.number().int().min(0).nullable().optional(),
+  notes: z.string().max(1000).nullable().optional(),
+});
+export type MatchPoolInput = z.infer<typeof matchPoolSchema>;
+
+export const roleAssignmentSchema = z.object({
+  userId: z.string().uuid().optional(),
+  email: z.string().email().optional(),
+  name: z.string().max(200).optional(),
+  password: passwordSchema.optional(),
+  role: z.enum(["TOURNAMENT_ADMIN", "SCOREKEEPER", "OFFICIAL"]),
+  championshipId: z.string().uuid(),
+});
+export type RoleAssignmentInput = z.infer<typeof roleAssignmentSchema>;
+
+export const championshipFeeSchema = z.object({
+  championshipId: z.string().uuid(),
+  name: z.string().min(1).max(200),
+  description: z.string().max(1000).nullable().optional(),
+  amountKes: z.number().int().min(0),
+  isRequired: z.boolean().default(true),
+});
+export type ChampionshipFeeInput = z.infer<typeof championshipFeeSchema>;

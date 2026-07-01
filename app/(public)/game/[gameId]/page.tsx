@@ -1,0 +1,188 @@
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { prisma } from "@/lib/prisma";
+import { formatSecondsToTime } from "@/lib/scoring";
+
+export const revalidate = 15;
+
+export default async function GameDetailPage({ params }: { params: { gameId: string } }) {
+  const game = await prisma.game.findUnique({
+    where: { id: params.gameId },
+    include: {
+      championship: { select: { id: true, name: true, isPublished: true } },
+      participants: {
+        orderBy: [{ position: "asc" }, { bibNumber: "asc" }],
+        include: { school: { select: { name: true } }, tournamentTeam: { select: { name: true } } },
+      },
+      heats: {
+        orderBy: { heatNumber: "asc" },
+        include: {
+          participants: {
+            orderBy: [{ position: "asc" }, { laneNumber: "asc" }],
+            include: { participant: { select: { firstName: true, lastName: true, bibNumber: true } } },
+          },
+        },
+      },
+      matchPools: { orderBy: { createdAt: "asc" } },
+    },
+  });
+
+  if (!game || !game.championship.isPublished) notFound();
+
+  return (
+    <div className="container py-16">
+      <Link href={`/championship/${game.championship.id}`} className="text-sm text-gold hover:underline">
+        &larr; {game.championship.name}
+      </Link>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Badge>{game.gender}</Badge>
+        <Badge variant="secondary">{game.schoolLevel.replace("_", " ")}</Badge>
+        <Badge variant="outline">{game.isTimed ? "Timed event" : "Scored event"}</Badge>
+      </div>
+      <h1 className="mt-3 text-3xl font-bold text-foreground">{game.name}</h1>
+
+      {game.isTimed ? (
+        <div className="mt-8 space-y-8">
+          {game.heats.length > 0 ? (
+            game.heats.map((heat) => (
+              <Card key={heat.id}>
+                <CardHeader>
+                  <CardTitle>
+                    {heat.heatType === "final" ? "Final" : `Heat ${heat.heatNumber}`}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Pos</TableHead>
+                        <TableHead>Lane</TableHead>
+                        <TableHead>Bib</TableHead>
+                        <TableHead>Athlete</TableHead>
+                        <TableHead>Time</TableHead>
+                        <TableHead>Qualified</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {heat.participants.map((hp) => (
+                        <TableRow key={hp.id}>
+                          <TableCell>{hp.position ?? "-"}</TableCell>
+                          <TableCell>{hp.laneNumber ?? "-"}</TableCell>
+                          <TableCell>{hp.participant.bibNumber}</TableCell>
+                          <TableCell>
+                            {hp.participant.firstName} {hp.participant.lastName}
+                          </TableCell>
+                          <TableCell>{hp.timeTaken ? formatSecondsToTime(Number(hp.timeTaken)) : "-"}</TableCell>
+                          <TableCell>{hp.isQualifiedForFinal ? "Yes" : "-"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Final Results</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResultsTable participants={game.participants} isTimed />
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      ) : game.matchPools.length > 0 ? (
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>Fixtures</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Round</TableHead>
+                  <TableHead>Match</TableHead>
+                  <TableHead>Score</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {game.matchPools.map((mp) => (
+                  <TableRow key={mp.id}>
+                    <TableCell>{mp.roundName}</TableCell>
+                    <TableCell>Team {mp.teamAId.slice(0, 6)} vs Team {mp.teamBId.slice(0, 6)}</TableCell>
+                    <TableCell>
+                      {mp.teamAScore ?? "-"} : {mp.teamBScore ?? "-"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>Results</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResultsTable participants={game.participants} isTimed={false} />
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+interface ParticipantRow {
+  id: string;
+  firstName: string;
+  lastName: string;
+  bibNumber: number;
+  position: number | null;
+  timeTaken: unknown;
+  score: unknown;
+  school: { name: string } | null;
+  tournamentTeam: { name: string } | null;
+}
+
+function ResultsTable({ participants, isTimed }: { participants: ParticipantRow[]; isTimed: boolean }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Pos</TableHead>
+          <TableHead>Bib</TableHead>
+          <TableHead>Participant</TableHead>
+          <TableHead>Institution</TableHead>
+          <TableHead>{isTimed ? "Time" : "Score"}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {participants.map((p) => (
+          <TableRow key={p.id}>
+            <TableCell>{p.position ?? "-"}</TableCell>
+            <TableCell>{p.bibNumber}</TableCell>
+            <TableCell>
+              {p.firstName} {p.lastName}
+            </TableCell>
+            <TableCell>{p.school?.name ?? p.tournamentTeam?.name ?? "-"}</TableCell>
+            <TableCell>
+              {isTimed ? (p.timeTaken ? formatSecondsToTime(Number(p.timeTaken)) : "-") : p.score ? Number(p.score) : "-"}
+            </TableCell>
+          </TableRow>
+        ))}
+        {participants.length === 0 && (
+          <TableRow>
+            <TableCell colSpan={5} className="text-center text-muted">
+              No results recorded yet.
+            </TableCell>
+          </TableRow>
+        )}
+      </TableBody>
+    </Table>
+  );
+}

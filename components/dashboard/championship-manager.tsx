@@ -1,0 +1,97 @@
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PanelErrorBoundary } from "@/components/error-boundary";
+import { GamesPanel } from "@/components/dashboard/games-panel";
+import { ParticipantsPanel } from "@/components/dashboard/participants-panel";
+import { CallRoomPanel } from "@/components/dashboard/call-room-panel";
+import { BibRangesPanel } from "@/components/dashboard/bib-ranges-panel";
+import { ReportsPanel } from "@/components/dashboard/reports-panel";
+import { apiPatch } from "@/lib/api-client";
+
+export function ChampionshipManager({
+  championshipId,
+  name,
+  category,
+  isPublished,
+}: {
+  championshipId: string;
+  name: string;
+  category: string;
+  isPublished: boolean;
+}) {
+  const router = useRouter();
+  const [publishing, setPublishing] = React.useState(false);
+
+  async function togglePublish() {
+    setPublishing(true);
+    try {
+      await apiPatch(`/api/championships/${championshipId}`, { isPublished: !isPublished });
+      toast.success(isPublished ? "Championship unpublished" : "Championship published");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-foreground">{name}</h1>
+          <Badge variant={isPublished ? "success" : "outline"}>{isPublished ? "Published" : "Draft"}</Badge>
+        </div>
+        <Button variant={isPublished ? "outline" : "default"} onClick={togglePublish} disabled={publishing}>
+          {publishing ? "Saving..." : isPublished ? "Unpublish" : "Publish"}
+        </Button>
+      </div>
+
+      <Tabs defaultValue="games">
+        <TabsList className="flex-wrap">
+          <TabsTrigger value="games">Games</TabsTrigger>
+          <TabsTrigger value="participants">Participants</TabsTrigger>
+          <TabsTrigger value="call-room">Call Room</TabsTrigger>
+          <TabsTrigger value="bib-ranges">Bib Ranges</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="games">
+          <PanelErrorBoundary fallbackTitle="Games panel failed to load">
+            <GamesPanel championshipId={championshipId} category={category} />
+          </PanelErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="participants">
+          <PanelErrorBoundary fallbackTitle="Participants panel failed to load">
+            <ParticipantsPanel championshipId={championshipId} />
+          </PanelErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="call-room">
+          <PanelErrorBoundary fallbackTitle="Call room failed to load">
+            <CallRoomPanel championshipId={championshipId} />
+          </PanelErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="bib-ranges">
+          <PanelErrorBoundary fallbackTitle="Bib ranges panel failed to load">
+            <BibRangesPanel championshipId={championshipId} />
+          </PanelErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="reports">
+          <PanelErrorBoundary fallbackTitle="Reports panel failed to load">
+            <ReportsPanel championshipId={championshipId} championshipName={name} />
+          </PanelErrorBoundary>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

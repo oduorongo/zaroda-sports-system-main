@@ -1,0 +1,536 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  TENANT_OWNER
+  TOURNAMENT_ADMIN
+  SCOREKEEPER
+  OFFICIAL
+}
+
+enum AccountType {
+  SCHOOL
+  OPEN_TOURNAMENT
+}
+
+enum GameCategory {
+  BALL_GAMES
+  ATHLETICS
+  MUSIC
+  OTHER_GAMES
+}
+
+enum Level {
+  BASE
+  ZONE
+  SUB_COUNTY
+  COUNTY
+  REGIONAL
+  NATIONAL
+}
+
+enum SchoolLevel {
+  PRIMARY
+  JUNIOR_SECONDARY
+  SECONDARY
+}
+
+enum Gender {
+  BOYS
+  GIRLS
+  MIXED
+}
+
+enum ParticipantStatus {
+  REGISTERED
+  CONFIRMED_IN_CALL_ROOM
+  DISQUALIFIED
+}
+
+enum PackageTier {
+  ESSENTIAL
+  // Reserved for future tiers - adding a new value here never requires
+  // a schema rewrite, only a migration to extend the enum.
+  PROFESSIONAL
+  ELITE
+  SEASON_BUNDLE
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum TeamPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum AuditOp {
+  INSERT
+  UPDATE
+  DELETE
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Core tenancy & auth
+// ─────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  roles              UserRole[]
+  tenant              Tenant?
+  createdChampionships Championship[]        @relation("ChampionshipCreatedBy")
+  sentMessages         AdminMessage[]        @relation("MessageSender")
+  receivedMessages     AdminMessage[]        @relation("MessageRecipient")
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+
+  @@map("users")
+}
+
+model UserRole {
+  id             String   @id @default(uuid())
+  userId         String
+  role           Role
+  championshipId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  championship Championship? @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([championshipId])
+  @@map("user_roles")
+}
+
+model Tenant {
+  id               String      @id @default(uuid())
+  organizationName String
+  contactName      String
+  email            String      @unique
+  phone            String
+  accountType      AccountType
+  county           String
+  subcounty        String
+  gameCategory     GameCategory
+  userId           String      @unique
+  lastActiveAt     DateTime    @default(now())
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  championships           Championship[]
+  subscriptions           ChampionshipSubscription[]
+  paymentTransactions     PaymentTransaction[]
+
+  @@map("tenants")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Competition structure
+// ─────────────────────────────────────────────────────────────────────────
+
+model Championship {
+  id          String       @id @default(uuid())
+  tenantId    String
+  name        String
+  level       Level
+  schoolLevel SchoolLevel
+  category    GameCategory
+  county      String
+  location    String
+  startDate   DateTime
+  endDate     DateTime
+  isPublished Boolean      @default(false)
+  createdBy   String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  tenant        Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator       User                       @relation("ChampionshipCreatedBy", fields: [createdBy], references: [id])
+  userRoles     UserRole[]
+  games         Game[]
+  participants  Participant[]
+  tournamentTeams TournamentTeam[]
+  bibRanges     SchoolBibRange[]
+  subscriptions ChampionshipSubscription[]
+  fees          ChampionshipFee[]
+  teamFeePayments TeamFeePayment[]
+
+  @@index([tenantId])
+  @@map("championships")
+}
+
+model School {
+  id        String   @id @default(uuid())
+  name      String
+  zone      String
+  subcounty String
+  county    String
+  region    String
+  country   String   @default("Kenya")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants Participant[]
+  bibRanges    SchoolBibRange[]
+
+  @@map("schools")
+}
+
+model TournamentTeam {
+  id             String   @id @default(uuid())
+  championshipId String
+  name           String
+  teamCode       String
+  teamColor      String?
+  contactName    String?
+  contactEmail   String?
+  contactPhone   String?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  championship Championship     @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+  participants Participant[]
+  feePayments  TeamFeePayment[]
+
+  @@unique([championshipId, teamCode])
+  @@map("tournament_teams")
+}
+
+model Game {
+  id             String       @id @default(uuid())
+  championshipId String
+  name           String
+  category       GameCategory
+  gender         Gender
+  schoolLevel    SchoolLevel
+  isTimed        Boolean
+  maxQualifiers  Int          @default(5)
+  raceType       String?
+  scheduledDate  DateTime?
+  /// Event open to both Primary and Junior Secondary school levels - credits
+  /// points to both standings tables but only once into the combined total.
+  isPrimaryJunior Boolean     @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  championship Championship  @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+  participants Participant[]
+  heats        Heat[]
+  matchPools   MatchPool[]
+
+  @@index([championshipId])
+  @@map("games")
+}
+
+model Participant {
+  id             String            @id @default(uuid())
+  championshipId String
+  gameId         String
+  schoolId       String?
+  tournamentTeamId String?
+  firstName      String
+  lastName       String
+  gender         Gender
+  dateOfBirth    DateTime?
+  bibNumber      Int
+  laneNumber     Int?
+  personalBest   Decimal?          @db.Decimal(10, 3)
+  timeTaken      Decimal?          @db.Decimal(10, 3)
+  position       Int?
+  score          Decimal?          @db.Decimal(10, 3)
+  isQualified    Boolean           @default(false)
+  status         ParticipantStatus @default(REGISTERED)
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  championship    Championship    @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+  game            Game            @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  school          School?         @relation(fields: [schoolId], references: [id])
+  tournamentTeam  TournamentTeam? @relation(fields: [tournamentTeamId], references: [id])
+  heatParticipations HeatParticipant[]
+
+  @@unique([championshipId, bibNumber])
+  @@index([gameId])
+  @@index([schoolId])
+  @@index([tournamentTeamId])
+  @@map("participants")
+}
+
+model Heat {
+  id        String   @id @default(uuid())
+  gameId    String
+  heatNumber Int
+  heatType  String   @default("heat")
+  createdAt DateTime @default(now())
+
+  game         Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  participants HeatParticipant[]
+
+  @@index([gameId])
+  @@map("heats")
+}
+
+model HeatParticipant {
+  id                  String   @id @default(uuid())
+  heatId              String
+  participantId       String
+  timeTaken           Decimal? @db.Decimal(10, 3)
+  position            Int?
+  laneNumber          Int?
+  score               Decimal? @db.Decimal(10, 3)
+  isQualifiedForFinal Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  heat        Heat        @relation(fields: [heatId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([heatId, participantId])
+  @@index([participantId])
+  @@map("heat_participants")
+}
+
+// teamAId / teamBId can reference either a TournamentTeam or a School depending
+// on competition type; stored as plain UUID columns (no FK enforced across two
+// possible parent tables) and resolved in application code by championship type.
+model MatchPool {
+  id         String   @id @default(uuid())
+  gameId     String
+  roundName  String   @default("Round 1")
+  teamAId    String
+  teamBId    String
+  teamAScore Int?
+  teamBScore Int?
+  winnerId   String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@index([gameId])
+  @@map("match_pools")
+}
+
+model SchoolBibRange {
+  id             String   @id @default(uuid())
+  championshipId String
+  schoolId       String
+  rangeStart     Int
+  rangeEnd       Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  championship Championship @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+  school       School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([championshipId, schoolId])
+  @@map("school_bib_ranges")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Monetization
+// ─────────────────────────────────────────────────────────────────────────
+
+model SubscriptionPlan {
+  id          String      @id @default(uuid())
+  displayName String
+  packageTier PackageTier @default(ESSENTIAL)
+  level       Level
+  priceKes    Int
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  subscriptions ChampionshipSubscription[]
+  transactions  PaymentTransaction[]
+
+  @@unique([packageTier, level])
+  @@map("subscription_plans")
+}
+
+model ChampionshipSubscription {
+  id             String             @id @default(uuid())
+  tenantId       String
+  planId         String
+  championshipId String?
+  category       GameCategory?
+  status         SubscriptionStatus @default(TRIAL)
+  trialStartedAt DateTime           @default(now())
+  trialEndsAt    DateTime
+  paidAt         DateTime?
+  expiresAt      DateTime?
+  amountPaidKes  Int?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan         SubscriptionPlan  @relation(fields: [planId], references: [id])
+  championship Championship?     @relation(fields: [championshipId], references: [id])
+
+  @@index([tenantId])
+  @@index([championshipId])
+  @@map("championship_subscriptions")
+}
+
+model PaymentTransaction {
+  id                String        @id @default(uuid())
+  tenantId          String
+  planId            String
+  paystackReference String        @unique
+  amountKes         Int
+  status            PaymentStatus @default(PENDING)
+  paystackResponse  Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan   SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@index([tenantId])
+  @@map("payment_transactions")
+}
+
+model ChampionshipFee {
+  id             String   @id @default(uuid())
+  championshipId String
+  name           String
+  description    String?
+  amountKes      Int
+  isRequired     Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  championship Championship     @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+  payments     TeamFeePayment[]
+
+  @@index([championshipId])
+  @@map("championship_fees")
+}
+
+model TeamFeePayment {
+  id                String             @id @default(uuid())
+  teamId            String
+  feeId             String
+  championshipId    String
+  amountKes         Int
+  status            TeamPaymentStatus  @default(PENDING)
+  paystackReference String?
+  paidAt            DateTime?
+  notes             String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  team         TournamentTeam   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  fee          ChampionshipFee  @relation(fields: [feeId], references: [id], onDelete: Cascade)
+  championship Championship     @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([championshipId])
+  @@map("team_fee_payments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Communication & audit
+// ─────────────────────────────────────────────────────────────────────────
+
+model Circular {
+  id            String   @id @default(uuid())
+  title         String
+  content       String
+  senderName    String
+  senderRole    String   @default("National Admin")
+  targetLevel   Level    @default(NATIONAL)
+  isPublished   Boolean  @default(true)
+  documentUrl   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("circulars")
+}
+
+model AdminMessage {
+  id          String   @id @default(uuid())
+  senderId    String
+  recipientId String?
+  parentId    String?
+  subject     String
+  body        String
+  isBroadcast Boolean  @default(false)
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  sender    User           @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User?          @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  parent    AdminMessage?  @relation("MessageThread", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies   AdminMessage[] @relation("MessageThread")
+
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([parentId])
+  @@map("admin_messages")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  body      String
+  type      String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  changedBy  String?
+  changedAt  DateTime @default(now())
+  operation  AuditOp
+  tableName  String
+  recordId   String
+  oldData    Json?
+  newData    Json?
+
+  changer User? @relation(fields: [changedBy], references: [id], onDelete: SetNull)
+
+  @@index([tableName, recordId])
+  @@index([changedBy])
+  @@map("audit_logs")
+}

@@ -1,0 +1,56 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { withAudit } from "@/lib/audit";
+import { requireChampionshipAccess, toErrorResponse } from "@/lib/authorize";
+import { matchPoolSchema } from "@/lib/validations";
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const gameId = searchParams.get("gameId");
+    if (!gameId) return NextResponse.json({ error: "gameId is required" }, { status: 400 });
+
+    const matchPools = await prisma.matchPool.findMany({ where: { gameId }, orderBy: { createdAt: "asc" } });
+    return NextResponse.json({ matchPools });
+  } catch (error) {
+    const { body, status } = toErrorResponse(error);
+    return NextResponse.json(body, { status });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body: unknown = await request.json();
+    const input = matchPoolSchema.parse(body);
+
+    const game = await prisma.game.findUnique({ where: { id: input.gameId } });
+    if (!game) return NextResponse.json({ error: "Game not found" }, { status: 404 });
+
+    const ctx = await requireChampionshipAccess(game.championshipId, ["TOURNAMENT_ADMIN", "SCOREKEEPER"]);
+
+    const matchPool = await withAudit({
+      actorId: ctx.userId,
+      operation: "INSERT",
+      tableName: "match_pools",
+      mutate: (tx) =>
+        tx.matchPool.create({
+          data: {
+            gameId: input.gameId,
+            roundName: input.roundName,
+            teamAId: input.teamAId,
+            teamBId: input.teamBId,
+            teamAScore: input.teamAScore ?? null,
+            teamBScore: input.teamBScore ?? null,
+            notes: input.notes ?? null,
+          },
+        }),
+      recordId: (result) => result.id,
+      newData: input,
+    });
+
+    return NextResponse.json({ matchPool }, { status: 201 });
+  } catch (error) {
+    const { body, status } = toErrorResponse(error);
+    return NextResponse.json(body, { status });
+  }
+}

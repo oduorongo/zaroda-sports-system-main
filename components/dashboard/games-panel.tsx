@@ -1,0 +1,173 @@
+"use client";
+
+import * as React from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { gameCreateSchema, type GameCreateInput } from "@/lib/validations";
+import { apiGet, apiPost } from "@/lib/api-client";
+
+interface GameRow {
+  id: string;
+  name: string;
+  category: string;
+  gender: string;
+  schoolLevel: string;
+  isTimed: boolean;
+  isPrimaryJunior: boolean;
+  maxQualifiers: number;
+  _count: { participants: number; heats: number; matchPools: number };
+}
+
+const GENDERS = ["BOYS", "GIRLS", "MIXED"];
+const SCHOOL_LEVELS = ["PRIMARY", "JUNIOR_SECONDARY", "SECONDARY"];
+const CATEGORIES = ["BALL_GAMES", "ATHLETICS", "MUSIC", "OTHER_GAMES"];
+
+export function GamesPanel({ championshipId, category }: { championshipId: string; category: string }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = React.useState(false);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["games", championshipId],
+    queryFn: () => apiGet<{ games: GameRow[] }>(`/api/games?championshipId=${championshipId}`),
+  });
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    reset,
+    formState: { errors },
+  } = useForm<GameCreateInput>({
+    resolver: zodResolver(gameCreateSchema),
+    defaultValues: {
+      championshipId,
+      category: category as GameCreateInput["category"],
+      gender: "BOYS",
+      schoolLevel: "SECONDARY",
+      isTimed: category === "ATHLETICS",
+      maxQualifiers: 5,
+      isPrimaryJunior: false,
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (values: GameCreateInput) => apiPost("/api/games", values),
+    onSuccess: () => {
+      toast.success("Game added");
+      queryClient.invalidateQueries({ queryKey: ["games", championshipId] });
+      setOpen(false);
+      reset();
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to add game"),
+  });
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>Games</CardTitle>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm">
+              <Plus className="h-4 w-4" /> Add game
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add a game</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit((v) => createMutation.mutate(v))} className="space-y-4">
+              <div>
+                <Label htmlFor="game-name">Name</Label>
+                <Input id="game-name" className="mt-1.5" {...register("name")} />
+                {errors.name && <p className="mt-1 text-sm text-red-400">{errors.name.message}</p>}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Gender</Label>
+                  <Select value={watch("gender")} onValueChange={(v) => setValue("gender", v as GameCreateInput["gender"])}>
+                    <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {GENDERS.map((g) => (
+                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>School level</Label>
+                  <Select value={watch("schoolLevel")} onValueChange={(v) => setValue("schoolLevel", v as GameCreateInput["schoolLevel"])}>
+                    <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {SCHOOL_LEVELS.map((l) => (
+                        <SelectItem key={l} value={l}>{l.replace("_", " ")}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Category</Label>
+                  <Select value={watch("category")} onValueChange={(v) => setValue("category", v as GameCreateInput["category"])}>
+                    <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>{c.replace("_", " ")}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="maxQualifiers">Max qualifiers</Label>
+                  <Input
+                    id="maxQualifiers"
+                    type="number"
+                    className="mt-1.5"
+                    {...register("maxQualifiers", { valueAsNumber: true })}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm text-foreground">
+                  <input type="checkbox" {...register("isTimed")} /> Timed event (athletics track)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-foreground">
+                  <input type="checkbox" {...register("isPrimaryJunior")} /> Open to Primary + Junior Secondary
+                </label>
+              </div>
+              <Button type="submit" className="w-full" disabled={createMutation.isPending}>
+                {createMutation.isPending ? "Adding..." : "Add game"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {isLoading && <p className="text-muted">Loading games...</p>}
+        {!isLoading && (data?.games ?? []).length === 0 && <p className="text-muted">No games yet. Add your first game.</p>}
+        {(data?.games ?? []).map((game) => (
+          <div key={game.id} className="flex items-center justify-between rounded-md border border-border p-3">
+            <div>
+              <p className="font-medium text-foreground">{game.name}</p>
+              <p className="text-sm text-muted">
+                {game.gender} - {game.schoolLevel.replace("_", " ")} - {game._count.participants} participants
+              </p>
+            </div>
+            <Badge variant={game.isTimed ? "secondary" : "outline"}>{game.isTimed ? "Timed" : "Scored"}</Badge>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
