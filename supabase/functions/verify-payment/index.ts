@@ -3,150 +3,299 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { checkRateDB } from '../_shared/dbRateLimit.ts';
 import { extractIp } from '../_shared/rateLimit.ts';
 
-const corsHeaders = {
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+const RESPONSE_HEADERS = { ...CORS_HEADERS, 'Content-Type': 'application/json' };
+const PAYSTACK_VERIFY_URL = 'https://api.paystack.co/transaction/verify';
+const RATE_LIMIT_REQUESTS = 60;
+const RATE_LIMIT_WINDOW_SECONDS = 60;
+const SUBSCRIPTION_YEARS = 1;
 
-  const ip = extractIp(req);
+// ============================================================================
+// TYPES
+// ============================================================================
+
+interface TeamFeeMetadata {
+  type: 'team_fee';
+  team_payment_id: string;
+  team_id: string;
+  fee_id: string;
+  championship_id: string;
+  [key: string]: string | number | null | boolean;
+}
+
+interface SubscriptionMetadata {
+  championship_id?: string | null;
+  category?: string | null;
+  [key: string]: string | number | null | boolean | undefined;
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function errorResponse(message: string, status: number = 400): Response {
+  console.error(`[Verify Payment Error] Status ${status}: ${message}`);
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: RESPONSE_HEADERS,
+  });
+}
+
+function successResponse(data: Record<string, unknown>): Response {
+  return new Response(JSON.stringify(data), {
+    headers: RESPONSE_HEADERS,
+  });
+}
+
+function validateEnvironment(): { valid: false; error: string; status: number } | { valid: true; supabaseUrl: string; serviceKey: string; paystackKey: string } {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const paystackKey = Deno.env.get('PAYSTACK_SECRET_KEY');
+
   if (!supabaseUrl || !serviceKey) {
-    return new Response(JSON.stringify({ error: 'Server is not configured' }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return { valid: false, error: 'Server is not configured', status: 500 };
+  }
+  if (!paystackKey) {
+    return { valid: false, error: 'Payment provider not configured', status: 500 };
   }
 
-  const dbIp = await checkRateDB(supabaseUrl, serviceKey, `ip:${ip}`, 60, 60);
-  if (!dbIp.allowed) return new Response(JSON.stringify({ error: 'Too many requests' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  return { valid: true, supabaseUrl, serviceKey, paystackKey };
+}
 
+async function getReference(req: Request): Promise<string | null> {
+  const url = new URL(req.url);
+  const fromQuery = url.searchParams.get('reference');
+  if (fromQuery) return fromQuery;
+
+  if (req.method === 'POST') {
+    try {
+      const body = await req.json();
+      return body?.reference ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+async function verifyWithPaystack(
+  reference: string,
+  paystackKey: string,
+): Promise<{ ok: boolean; data: any }> {
   try {
-    const url = new URL(req.url);
-    const reference = url.searchParams.get('reference') ||
-      (req.method === 'POST' ? (await req.json()).reference : null);
-
-    if (!reference) {
-      return new Response(JSON.stringify({ error: 'reference required' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const paystackKey = Deno.env.get('PAYSTACK_SECRET_KEY');
-    if (!paystackKey) {
-      return new Response(JSON.stringify({ error: 'Payment provider not configured' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+    const res = await fetch(`${PAYSTACK_VERIFY_URL}/${reference}`, {
       headers: { Authorization: `Bearer ${paystackKey}` },
     });
-    const verifyData = await verifyRes.json();
+    const data = await res.json();
+    return { ok: res.ok, data };
+  } catch (error) {
+    console.error('[Paystack Verify Exception]', error);
+    return { ok: false, data: null };
+  }
+}
 
-    const admin = createClient(supabaseUrl, serviceKey);
+function getExpiryDate(): string {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() + SUBSCRIPTION_YEARS);
+  return date.toISOString();
+}
 
-    if (!verifyRes.ok || !verifyData.status || verifyData.data?.status !== 'success') {
-      await admin.from('payment_transactions')
-        .update({ status: 'failed', paystack_response: verifyData })
-        .eq('paystack_reference', reference);
-      return new Response(JSON.stringify({ success: false, message: 'Payment not successful' }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+// ============================================================================
+// PAYMENT HANDLERS
+// ============================================================================
 
-    const meta = verifyData.data.metadata || {};
-    const championshipId = meta.championship_id || null;
-    const category = meta.category || null;
+async function handleTeamFeeVerification(
+  meta: TeamFeeMetadata,
+  reference: string,
+  admin: any,
+): Promise<Response> {
+  const { team_payment_id, team_id, fee_id, championship_id } = meta;
 
-    if (meta.type === 'team_fee') {
-      const teamPaymentId = meta.team_payment_id || null;
-      const teamId = meta.team_id || null;
-      const feeId = meta.fee_id || null;
+  if (!team_payment_id || !team_id || !fee_id || !championship_id) {
+    return errorResponse('Team payment metadata incomplete', 400);
+  }
 
-      if (!teamPaymentId || !teamId || !feeId || !championshipId) {
-        return new Response(JSON.stringify({ error: 'Team payment metadata missing' }), {
-          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+  // Idempotency check
+  const { data: existing } = await admin
+    .from('team_fee_payments')
+    .select('id, status')
+    .eq('id', team_payment_id)
+    .maybeSingle();
 
-      const { data: existingTeamPayment } = await admin
-        .from('team_fee_payments')
-        .select('id, status')
-        .eq('id', teamPaymentId)
-        .maybeSingle();
+  if (existing?.status === 'paid') {
+    console.log(`[Team Fee] Already processed: ${team_payment_id}`);
+    return successResponse({ success: true, already_processed: true, type: 'team_fee' });
+  }
 
-      if (existingTeamPayment?.status === 'paid') {
-        return new Response(JSON.stringify({ success: true, already_processed: true, type: 'team_fee' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+  const { error: updateError } = await admin
+    .from('team_fee_payments')
+    .update({
+      status: 'paid',
+      paid_at: new Date().toISOString(),
+      paystack_reference: reference,
+    })
+    .eq('id', team_payment_id);
 
-      await admin.from('team_fee_payments').update({
-        status: 'paid',
-        paid_at: new Date().toISOString(),
-        paystack_reference: reference,
-      }).eq('id', teamPaymentId);
+  if (updateError) {
+    console.error('[Team Fee Update Error]', updateError);
+    return errorResponse('Failed to activate team fee payment', 500);
+  }
 
-      return new Response(JSON.stringify({
-        success: true,
-        type: 'team_fee',
-        team_id: teamId,
-        fee_id: feeId,
-        championship_id: championshipId,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+  console.log(`[Team Fee] Payment activated: ${team_payment_id}`);
 
-    // Look up the pending tx for subscription payments.
-    const { data: tx } = await admin
-      .from('payment_transactions').select('*').eq('paystack_reference', reference).maybeSingle();
-    if (!tx) {
-      return new Response(JSON.stringify({ error: 'Transaction not found' }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+  return successResponse({
+    success: true,
+    type: 'team_fee',
+    team_id,
+    fee_id,
+    championship_id,
+  });
+}
 
-    if (tx.status === 'success') {
-      return new Response(JSON.stringify({ success: true, already_processed: true, type: 'subscription' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+async function handleSubscriptionVerification(
+  reference: string,
+  meta: SubscriptionMetadata,
+  verifyData: any,
+  admin: any,
+): Promise<Response> {
+  const championshipId = meta.championship_id ?? null;
+  const category = meta.category ?? null;
 
-    // Activate subscription (1 year validity from now)
-    const expiresAt = new Date();
-    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+  // Look up the pending transaction
+  const { data: tx, error: txError } = await admin
+    .from('payment_transactions')
+    .select('*')
+    .eq('paystack_reference', reference)
+    .maybeSingle();
 
-    const { data: sub, error: subErr } = await admin.from('championship_subscriptions').insert({
+  if (txError || !tx) {
+    console.error('[Transaction Lookup Error]', txError);
+    return errorResponse('Transaction not found', 404);
+  }
+
+  // Idempotency check
+  if (tx.status === 'success') {
+    console.log(`[Subscription] Already processed: ${reference}`);
+    return successResponse({ success: true, already_processed: true, type: 'subscription' });
+  }
+
+  // Insert subscription record
+  const { data: sub, error: subError } = await admin
+    .from('championship_subscriptions')
+    .insert({
       tenant_id: tx.tenant_id,
       championship_id: championshipId,
       plan_id: tx.plan_id,
       status: 'active',
       paid_at: new Date().toISOString(),
-      expires_at: expiresAt.toISOString(),
+      expires_at: getExpiryDate(),
       amount_paid_kes: tx.amount_kes,
       category,
-    }).select().single();
+    })
+    .select()
+    .single();
 
-    if (subErr) console.error('sub insert err', subErr);
+  if (subError) {
+    console.error('[Subscription Insert Error]', subError);
+    // Still mark transaction as success since Paystack confirmed payment
+  }
 
-    await admin.from('payment_transactions').update({
+  // Update transaction status
+  const { error: txUpdateError } = await admin
+    .from('payment_transactions')
+    .update({
       status: 'success',
-      subscription_id: sub?.id,
+      subscription_id: sub?.id ?? null,
       paystack_response: verifyData.data,
-    }).eq('paystack_reference', reference);
+    })
+    .eq('paystack_reference', reference);
 
-    return new Response(JSON.stringify({ success: true, type: 'subscription', subscription: sub }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  } catch (e) {
-    console.error('verify-payment error', e);
-    return new Response(JSON.stringify({ error: String(e) }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+  if (txUpdateError) {
+    console.error('[Transaction Update Error]', txUpdateError);
+  }
+
+  console.log(`[Subscription] Activated: ${reference}, Plan: ${tx.plan_id}`);
+
+  return successResponse({ success: true, type: 'subscription', subscription: sub });
+}
+
+// ============================================================================
+// MAIN HANDLER
+// ============================================================================
+
+Deno.serve(async (req: Request): Promise<Response> => {
+  try {
+    if (req.method === 'OPTIONS') {
+      return new Response('ok', { headers: CORS_HEADERS });
+    }
+
+    if (req.method !== 'GET' && req.method !== 'POST') {
+      return errorResponse('Method not allowed', 405);
+    }
+
+    // Validate environment
+    const env = validateEnvironment();
+    if (!env.valid) {
+      return errorResponse(env.error, env.status);
+    }
+
+    const { supabaseUrl, serviceKey, paystackKey } = env;
+
+    // Rate limiting
+    const ip = extractIp(req);
+    const rateLimit = await checkRateDB(
+      supabaseUrl,
+      serviceKey,
+      `ip:${ip}`,
+      RATE_LIMIT_REQUESTS,
+      RATE_LIMIT_WINDOW_SECONDS,
+    );
+
+    if (!rateLimit.allowed) {
+      return errorResponse('Too many requests. Please try again later.', 429);
+    }
+
+    // Extract reference
+    const reference = await getReference(req);
+    if (!reference) {
+      return errorResponse('Payment reference is required', 400);
+    }
+
+    // Verify with Paystack
+    const { ok, data: verifyData } = await verifyWithPaystack(reference, paystackKey);
+    const admin = createClient(supabaseUrl, serviceKey);
+
+    // Handle failed verification
+    if (!ok || !verifyData?.status || verifyData.data?.status !== 'success') {
+      console.error('[Paystack Verification Failed]', verifyData);
+      await admin
+        .from('payment_transactions')
+        .update({ status: 'failed', paystack_response: verifyData })
+        .eq('paystack_reference', reference);
+
+      return successResponse({ success: false, message: 'Payment not successful' });
+    }
+
+    const meta = verifyData.data?.metadata ?? {};
+
+    // Route to correct handler
+    if (meta.type === 'team_fee') {
+      return await handleTeamFeeVerification(meta as TeamFeeMetadata, reference, admin);
+    }
+
+    return await handleSubscriptionVerification(reference, meta, verifyData, admin);
+  } catch (error) {
+    console.error('[Unhandled Exception]', error);
+    return errorResponse('Internal server error', 500);
   }
 });
