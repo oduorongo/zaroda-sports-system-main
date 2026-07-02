@@ -175,18 +175,19 @@ describe("computeStandings", () => {
   });
 
   it("breaks ties by head-to-head points before goal difference", () => {
-    // A and B both finish level on points; A beat B head-to-head, so A ranks above
-    // B even though B has a better overall goal difference against weaker teams.
+    // A and B finish level on points; A beat B head-to-head but has a worse
+    // overall goal difference than B (each padded a win against a separate
+    // weaker opponent). Head-to-head must still rank A above B, ahead of GD.
     const results: MatchResult[] = [
       { teamAId: "A", teamBId: "B", teamAScore: 1, teamBScore: 0 },
-      { teamAId: "B", teamBId: "C", teamAScore: 5, teamBScore: 0 },
-      { teamAId: "A", teamBId: "C", teamAScore: 0, teamBScore: 1 },
-      { teamAId: "C", teamBId: "B", teamAScore: 0, teamBScore: 1 },
+      { teamAId: "A", teamBId: "X", teamAScore: 0, teamBScore: 2 },
+      { teamAId: "B", teamBId: "Y", teamAScore: 2, teamBScore: 0 },
     ];
-    const standings = computeStandings(["A", "B", "C"], results, "FOOTBALL");
+    const standings = computeStandings(["A", "B", "X", "Y"], results, "FOOTBALL");
     const a = standings.find((s) => s.teamId === "A")!;
     const b = standings.find((s) => s.teamId === "B")!;
     expect(a.points).toBe(b.points);
+    expect(a.gd).toBeLessThan(b.gd);
     expect(standings.indexOf(a)).toBeLessThan(standings.indexOf(b));
   });
 
@@ -195,7 +196,7 @@ describe("computeStandings", () => {
       { teamAId: "A", teamBId: "X", teamAScore: 5, teamBScore: 0 },
       { teamAId: "B", teamBId: "Y", teamAScore: 1, teamBScore: 0 },
     ];
-    const standings = computeStandings(["A", "B"], results, "FOOTBALL");
+    const standings = computeStandings(["A", "B", "X", "Y"], results, "FOOTBALL");
     const a = standings.find((s) => s.teamId === "A")!;
     const b = standings.find((s) => s.teamId === "B")!;
     expect(a.points).toBe(b.points);
@@ -214,7 +215,7 @@ describe("computeStandings", () => {
       },
       { teamAId: "B", teamBId: "Y", teamAScore: 2, teamBScore: 0 },
     ];
-    const standings = computeStandings(["A", "B"], results, "FOOTBALL");
+    const standings = computeStandings(["A", "B", "X", "Y"], results, "FOOTBALL");
     const a = standings.find((s) => s.teamId === "A")!;
     const b = standings.find((s) => s.teamId === "B")!;
     expect(a.points).toBe(b.points);

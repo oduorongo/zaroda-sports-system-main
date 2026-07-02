@@ -38,7 +38,7 @@ export const loginSchema = z.object({
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
-export const championshipCreateSchema = z.object({
+const championshipFieldsSchema = z.object({
   name: z.string().min(3).max(200),
   level: levelSchema,
   schoolLevel: schoolLevelSchema,
@@ -48,11 +48,17 @@ export const championshipCreateSchema = z.object({
   startDate: z.coerce.date(),
   endDate: z.coerce.date(),
   isPublished: z.boolean().default(false),
-}).refine((data) => data.endDate >= data.startDate, {
-  message: "End date must be after start date",
-  path: ["endDate"],
 });
+export const championshipCreateSchema = championshipFieldsSchema.refine(
+  (data) => data.endDate >= data.startDate,
+  { message: "End date must be after start date", path: ["endDate"] },
+);
 export type ChampionshipCreateInput = z.infer<typeof championshipCreateSchema>;
+
+// Used for PATCH: all fields optional, without the cross-field refine (partial
+// updates may only touch one of startDate/endDate at a time).
+export const championshipUpdateSchema = championshipFieldsSchema.partial();
+export type ChampionshipUpdateInput = z.infer<typeof championshipUpdateSchema>;
 
 export const gameCreateSchema = z.object({
   championshipId: z.string().uuid(),

@@ -9,7 +9,7 @@ import {
   toErrorResponse,
   AuthorizationError,
 } from "@/lib/authorize";
-import { championshipCreateSchema } from "@/lib/validations";
+import { championshipUpdateSchema } from "@/lib/validations";
 
 async function loadChampionship(id: string) {
   return prisma.championship.findUnique({
@@ -51,7 +51,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (!owns) throw new AuthorizationError("You do not have access to this championship");
 
     const body: unknown = await request.json();
-    const input = championshipCreateSchema.partial().parse(body);
+    const input = championshipUpdateSchema.parse(body);
 
     if (input.level && input.level !== existing.level && !isSuperAdmin(ctx)) {
       await requireActiveSubscriptionForLevel(existing.tenantId, input.level);

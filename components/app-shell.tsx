@@ -3,13 +3,49 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Trophy, LogOut, type LucideIcon } from "lucide-react";
+import {
+  Trophy,
+  LogOut,
+  LayoutDashboard,
+  Building2,
+  ShieldCheck,
+  Megaphone,
+  ScrollText,
+  Inbox,
+  CreditCard,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+
+export type IconName =
+  | "LayoutDashboard"
+  | "Building2"
+  | "Trophy"
+  | "ShieldCheck"
+  | "Megaphone"
+  | "ScrollText"
+  | "Inbox"
+  | "CreditCard";
+
+// Server Component layouts (admin/dashboard) can't pass icon component
+// references as props into this Client Component - functions aren't
+// serializable across that boundary. Nav items carry a name string instead,
+// resolved against this map inside the client.
+const ICONS: Record<IconName, LucideIcon> = {
+  LayoutDashboard,
+  Building2,
+  Trophy,
+  ShieldCheck,
+  Megaphone,
+  ScrollText,
+  Inbox,
+  CreditCard,
+};
 
 export interface NavItem {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: IconName;
 }
 
 export function AppShell({
@@ -33,7 +69,7 @@ export function AppShell({
         <nav className="flex-1 space-y-1 p-4">
           {navItems.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const Icon = item.icon;
+            const Icon = ICONS[item.icon];
             return (
               <Link
                 key={item.href}

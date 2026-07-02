@@ -3,12 +3,13 @@ import DOMPurify from "isomorphic-dompurify";
 import { prisma } from "@/lib/prisma";
 import { withAudit } from "@/lib/audit";
 import { requireRole, toErrorResponse } from "@/lib/authorize";
-import { circularSchema } from "@/lib/validations";
+import { circularSchema, levelSchema } from "@/lib/validations";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const targetLevel = searchParams.get("targetLevel");
+    const targetLevelParam = levelSchema.safeParse(searchParams.get("targetLevel"));
+    const targetLevel = targetLevelParam.success ? targetLevelParam.data : undefined;
 
     const circulars = await prisma.circular.findMany({
       where: { isPublished: true, ...(targetLevel ? { targetLevel } : {}) },
