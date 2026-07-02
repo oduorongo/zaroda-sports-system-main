@@ -2,6 +2,8 @@
 // a client component - this module is only safe to import from Route Handlers,
 // Server Actions, and other server-only lib code.
 
+import { createHmac, timingSafeEqual } from "crypto";
+
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
 
 function getSecretKey(): string {
@@ -100,6 +102,29 @@ export function kesToKobo(amountKes: number): number {
 
 export function generatePaymentReference(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Paystack signs webhook bodies with HMAC-SHA512 over the raw (unparsed)
+ * request bytes, keyed with the secret key. Must be called with the exact
+ * raw body text - re-serializing a parsed JSON object can reorder keys or
+ * change whitespace and break the comparison.
+ */
+export function verifyPaystackWebhookSignature(rawBody: string, signature: string | null | undefined): boolean {
+  if (!signature) return false;
+
+  let secretKey: string;
+  try {
+    secretKey = getSecretKey();
+  } catch {
+    return false;
+  }
+
+  const expected = createHmac("sha512", secretKey).update(rawBody).digest("hex");
+  const expectedBuf = Buffer.from(expected, "utf8");
+  const signatureBuf = Buffer.from(signature, "utf8");
+  if (expectedBuf.length !== signatureBuf.length) return false;
+  return timingSafeEqual(expectedBuf, signatureBuf);
 }
 
 /** Essential-tier subscriptions run for 12 months from payment. */
