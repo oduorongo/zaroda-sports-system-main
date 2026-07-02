@@ -35,6 +35,13 @@ export async function POST(request: Request) {
     const game = await prisma.game.findUnique({ where: { id: input.gameId } });
     if (!game) return NextResponse.json({ error: "Game not found" }, { status: 404 });
 
+    if (input.poolId) {
+      const pool = await prisma.pool.findUnique({ where: { id: input.poolId } });
+      if (!pool || pool.gameId !== input.gameId) {
+        return NextResponse.json({ error: "Pool not found in this game" }, { status: 404 });
+      }
+    }
+
     const ctx = await requireChampionshipAccess(game.championshipId, ["TOURNAMENT_ADMIN", "SCOREKEEPER"]);
 
     const matchPool = await withAudit({
@@ -45,6 +52,7 @@ export async function POST(request: Request) {
         tx.matchPool.create({
           data: {
             gameId: input.gameId,
+            poolId: input.poolId ?? null,
             roundName: input.roundName,
             teamAId: input.teamAId,
             teamBId: input.teamBId,

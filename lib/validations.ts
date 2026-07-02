@@ -239,6 +239,10 @@ export type BulkTournamentTeamsInput = z.infer<typeof bulkTournamentTeamsSchema>
 
 export const matchPoolSchema = z.object({
   gameId: z.string().uuid(),
+  // Set when manually adding a fixture into a specific pool (so it shows up
+  // and is scored alongside that pool's auto-generated fixtures). Omitted/
+  // null for knockout-stage fixtures that cross pool boundaries.
+  poolId: z.string().uuid().nullable().optional(),
   roundName: z.string().max(100).default("Round 1"),
   teamAId: z.string().uuid(),
   teamBId: z.string().uuid(),

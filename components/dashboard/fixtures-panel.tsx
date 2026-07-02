@@ -228,13 +228,171 @@ function StandingsTable({
   );
 }
 
+function AddFixtureDialog({
+  triggerLabel = "Add fixture",
+  title,
+  teams,
+  poolId,
+  gameId,
+  onAdded,
+  roundPresets,
+}: {
+  triggerLabel?: string;
+  title: string;
+  teams: TeamOption[];
+  poolId: string | null;
+  gameId: string;
+  onAdded: () => void;
+  roundPresets?: string[];
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [teamAId, setTeamAId] = React.useState("");
+  const [teamBId, setTeamBId] = React.useState("");
+  const [roundName, setRoundName] = React.useState("Round 1");
+
+  const addMutation = useMutation({
+    mutationFn: () => apiPost("/api/match-pools", { gameId, poolId, roundName, teamAId, teamBId }),
+    onSuccess: () => {
+      toast.success("Fixture added");
+      onAdded();
+      setOpen(false);
+      setTeamAId("");
+      setTeamBId("");
+      setRoundName("Round 1");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to add fixture"),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" disabled={teams.length < 2}>
+          <Plus className="h-4 w-4" /> {triggerLabel}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label>Round name</Label>
+            <Input className="mt-1.5" value={roundName} onChange={(e) => setRoundName(e.target.value)} />
+            {roundPresets && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {roundPresets.map((preset) => (
+                  <Button key={preset} type="button" size="sm" variant="outline" onClick={() => setRoundName(preset)}>
+                    {preset}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Team A</Label>
+              <Select value={teamAId} onValueChange={setTeamAId}>
+                <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select team" /></SelectTrigger>
+                <SelectContent>
+                  {teams.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Team B</Label>
+              <Select value={teamBId} onValueChange={setTeamBId}>
+                <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select team" /></SelectTrigger>
+                <SelectContent>
+                  {teams.filter((t) => t.id !== teamAId).map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <Button
+            className="w-full"
+            disabled={!teamAId || !teamBId || addMutation.isPending}
+            onClick={() => addMutation.mutate()}
+          >
+            {addMutation.isPending ? "Adding..." : "Add fixture"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PoolSection({
+  pool,
+  teams,
+  fixtures,
+  gameId,
+  sport,
+  teamNameById,
+  onChanged,
+  onGenerate,
+  generating,
+}: {
+  pool: PoolOption;
+  teams: TeamOption[];
+  fixtures: MatchPoolRow[];
+  gameId: string;
+  sport: BallSport | null;
+  teamNameById: Map<string, string>;
+  onChanged: () => void;
+  onGenerate: () => void;
+  generating: boolean;
+}) {
+  const standings = React.useMemo(() => {
+    if (!sport) return [];
+    const results: MatchResult[] = fixtures
+      .filter((f) => f.teamAScore !== null && f.teamBScore !== null)
+      .map((f) => ({ teamAId: f.teamAId, teamBId: f.teamBId, teamAScore: f.teamAScore as number, teamBScore: f.teamBScore as number }));
+    return computeStandings(teams.map((t) => t.id), results, sport);
+  }, [fixtures, teams, sport]);
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+        <div>
+          <CardTitle>{pool.name}</CardTitle>
+          <CardDescription>
+            {teams.length} team{teams.length === 1 ? "" : "s"} - fixtures, score entry, and standings for this pool.
+          </CardDescription>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="secondary" disabled={teams.length < 2 || generating} onClick={onGenerate}>
+            <Shuffle className="h-4 w-4" /> Generate round robin
+          </Button>
+          <AddFixtureDialog
+            title={`Add a fixture to ${pool.name}`}
+            teams={teams}
+            poolId={pool.id}
+            gameId={gameId}
+            onAdded={onChanged}
+          />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <FixturesTable
+          fixtures={fixtures}
+          onChanged={onChanged}
+          emptyMessage="No fixtures yet in this pool - generate a round robin or add one manually above."
+        />
+        {sport && (
+          <StandingsTable title={`${pool.name} standings`} standings={standings} sport={sport} teamNameById={teamNameById} />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function FixturesPanel({ championshipId }: { championshipId: string }) {
   const queryClient = useQueryClient();
   const [gameId, setGameId] = React.useState<string>("");
-  const [teamAId, setTeamAId] = React.useState<string>("");
-  const [teamBId, setTeamBId] = React.useState<string>("");
-  const [roundName, setRoundName] = React.useState("Round 1");
-  const [addOpen, setAddOpen] = React.useState(false);
   const [newPoolName, setNewPoolName] = React.useState("");
 
   const { data: gamesData } = useQuery({
@@ -324,18 +482,6 @@ export function FixturesPanel({ championshipId }: { championshipId: string }) {
     onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to generate fixtures"),
   });
 
-  const addMutation = useMutation({
-    mutationFn: () => apiPost("/api/match-pools", { gameId, roundName, teamAId, teamBId }),
-    onSuccess: () => {
-      toast.success("Fixture added");
-      refetchAll();
-      setAddOpen(false);
-      setTeamAId("");
-      setTeamBId("");
-    },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to add fixture"),
-  });
-
   const teamNameById = React.useMemo(() => {
     const map = new Map<string, string>();
     for (const t of teams) map.set(t.id, t.name);
@@ -356,8 +502,10 @@ export function FixturesPanel({ championshipId }: { championshipId: string }) {
   }
 
   const unpooledTeams = teams.filter((t) => !t.poolId);
-  const poolStageFixtures = fixtures.filter((f) => f.poolId !== null);
-  const knockoutFixtures = fixtures.filter((f) => f.poolId === null);
+  // "Unassigned" bucket: fixtures with no pool - either manual knockout
+  // pairings (semis/final crossing pools) or, when no pools exist at all,
+  // every fixture for the game.
+  const unassignedFixtures = fixtures.filter((f) => f.poolId === null);
 
   // Combined standings across every team in the game - shown when no pools
   // have been created yet (preserves the original simple flat-pool workflow).
@@ -443,19 +591,9 @@ export function FixturesPanel({ championshipId }: { championshipId: string }) {
                       <p className="font-medium text-foreground">{pool.name}</p>
                       <p className="text-sm text-muted">{pool._count.teams} team{pool._count.teams === 1 ? "" : "s"}</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={pool._count.teams < 2 || generateMutation.isPending}
-                        onClick={() => generateMutation.mutate(pool.id)}
-                      >
-                        <Shuffle className="h-4 w-4" /> Generate round robin
-                      </Button>
-                      <Button size="icon" variant="ghost" onClick={() => deletePoolMutation.mutate(pool.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
+                    <Button size="icon" variant="ghost" onClick={() => deletePoolMutation.mutate(pool.id)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -499,143 +637,76 @@ export function FixturesPanel({ championshipId }: { championshipId: string }) {
         </Card>
       )}
 
+      {gameId && !fixturesLoading && pools.map((pool) => (
+        <PoolSection
+          key={pool.id}
+          pool={pool}
+          teams={teams.filter((t) => t.poolId === pool.id)}
+          fixtures={fixtures.filter((f) => f.poolId === pool.id)}
+          gameId={gameId}
+          sport={selectedGame?.sport ?? null}
+          teamNameById={teamNameById}
+          onChanged={refetchAll}
+          onGenerate={() => generateMutation.mutate(pool.id)}
+          generating={generateMutation.isPending}
+        />
+      ))}
+
       {gameId && (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
             <div>
-              <CardTitle>Pool Stage Fixtures</CardTitle>
-              <CardDescription>Auto-generated round-robin matches within each pool.</CardDescription>
+              <CardTitle>{pools.length > 0 ? "Knockout Stage" : "Fixtures"}</CardTitle>
+              <CardDescription>
+                {pools.length > 0
+                  ? "Manually pair teams that progress from pool play - semis, final, playoffs - or schedule fixtures for teams not yet placed in a pool."
+                  : "Add fixtures manually, or generate a full round robin below."}
+              </CardDescription>
             </div>
-            {pools.length === 0 && (
+            <div className="flex items-center gap-2">
               <Button
+                size="sm"
                 variant="secondary"
-                disabled={teams.length < 2 || generateMutation.isPending}
+                disabled={(pools.length > 0 ? unpooledTeams.length : teams.length) < 2 || generateMutation.isPending}
                 onClick={() => generateMutation.mutate(null)}
               >
-                <Shuffle className="h-4 w-4" /> Generate round robin
+                <Shuffle className="h-4 w-4" />
+                {pools.length > 0 ? `Generate for unpooled teams (${unpooledTeams.length})` : "Generate round robin"}
               </Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            {fixturesLoading && <p className="text-muted">Loading fixtures...</p>}
-            {!fixturesLoading && (
-              <FixturesTable
-                fixtures={poolStageFixtures}
-                onChanged={refetchAll}
-                emptyMessage="No pool-stage fixtures yet. Create a pool above (or generate directly if you're not using pools) to get started."
+              <AddFixtureDialog
+                title={pools.length > 0 ? "Add a knockout fixture" : "Add a fixture"}
+                teams={teams}
+                poolId={null}
+                gameId={gameId}
+                onAdded={refetchAll}
+                roundPresets={pools.length > 0 ? KNOCKOUT_ROUND_PRESETS : undefined}
               />
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {gameId && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Knockout Stage</CardTitle>
-              <CardDescription>Manually pair teams that progress from pool play - semis, final, playoffs.</CardDescription>
             </div>
-            <Dialog open={addOpen} onOpenChange={setAddOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm">
-                  <Plus className="h-4 w-4" /> Add fixture
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add a knockout fixture</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label>Round name</Label>
-                    <Input className="mt-1.5" value={roundName} onChange={(e) => setRoundName(e.target.value)} />
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {KNOCKOUT_ROUND_PRESETS.map((preset) => (
-                        <Button key={preset} type="button" size="sm" variant="outline" onClick={() => setRoundName(preset)}>
-                          {preset}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label>Team A</Label>
-                      <Select value={teamAId} onValueChange={setTeamAId}>
-                        <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select team" /></SelectTrigger>
-                        <SelectContent>
-                          {teams.map((t) => (
-                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Team B</Label>
-                      <Select value={teamBId} onValueChange={setTeamBId}>
-                        <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select team" /></SelectTrigger>
-                        <SelectContent>
-                          {teams.filter((t) => t.id !== teamAId).map((t) => (
-                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <Button
-                    className="w-full"
-                    disabled={!teamAId || !teamBId || addMutation.isPending}
-                    onClick={() => addMutation.mutate()}
-                  >
-                    {addMutation.isPending ? "Adding..." : "Add fixture"}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
             {fixturesLoading && <p className="text-muted">Loading fixtures...</p>}
             {!fixturesLoading && (
               <FixturesTable
-                fixtures={knockoutFixtures}
+                fixtures={unassignedFixtures}
                 onChanged={refetchAll}
-                emptyMessage="No knockout fixtures yet. Once pool standings show who's progressing, add the semi-final/final pairings here."
+                emptyMessage={
+                  pools.length > 0
+                    ? "No knockout fixtures yet. Once pool standings show who's progressing, add the semi-final/final pairings here."
+                    : "No fixtures yet. Add one manually or generate a round robin above."
+                }
+              />
+            )}
+            {pools.length === 0 && selectedGame?.sport && (
+              <StandingsTable
+                title="Standings"
+                description={`Auto-updates from saved fixture scores using ${sportLabel(selectedGame.sport)} rules.`}
+                standings={combinedStandings}
+                sport={selectedGame.sport as BallSport}
+                teamNameById={teamNameById}
               />
             )}
           </CardContent>
         </Card>
-      )}
-
-      {gameId && selectedGame?.sport && pools.length > 0 && (
-        <div className="space-y-6">
-          {pools.map((pool) => (
-            <StandingsTable
-              key={pool.id}
-              title={pool.name}
-              standings={standingsFor(teams.filter((t) => t.poolId === pool.id).map((t) => t.id))}
-              sport={selectedGame.sport as BallSport}
-              teamNameById={teamNameById}
-            />
-          ))}
-          {unpooledTeams.length > 0 && (
-            <StandingsTable
-              title="Unpooled teams"
-              standings={standingsFor(unpooledTeams.map((t) => t.id))}
-              sport={selectedGame.sport as BallSport}
-              teamNameById={teamNameById}
-            />
-          )}
-        </div>
-      )}
-
-      {gameId && selectedGame?.sport && pools.length === 0 && (
-        <StandingsTable
-          title="Standings"
-          description={`Auto-updates from saved fixture scores using ${sportLabel(selectedGame.sport)} rules.`}
-          standings={combinedStandings}
-          sport={selectedGame.sport as BallSport}
-          teamNameById={teamNameById}
-        />
       )}
     </div>
   );
