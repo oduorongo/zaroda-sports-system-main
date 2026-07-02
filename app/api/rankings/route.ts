@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext, isSuperAdmin, hasRole, toErrorResponse } from "@/lib/authorize";
 import { pointsForPosition } from "@/lib/scoring";
+import { computeChampionshipTeamStandings } from "@/lib/team-standings";
 
 interface RankingRow {
   entityId: string;
@@ -100,7 +101,15 @@ export async function GET(request: Request) {
       .sort((a, b) => b.grandTotal - a.grandTotal)
       .map((row, index) => ({ ...row, position: index + 1 }));
 
-    return NextResponse.json({ standings });
+    // Ball-games/indoor-games team fixtures don't produce Participant rows at
+    // all (teams play each other directly via MatchPool), so they'd
+    // otherwise never show up in the athletics-shaped table above.
+    const allTeamStandings = await computeChampionshipTeamStandings(championshipId);
+    const teamStandings = allTeamStandings.filter(
+      (g) => !schoolLevelParam || schoolLevelParam === "OVERALL" || g.schoolLevel === schoolLevelParam,
+    );
+
+    return NextResponse.json({ standings, teamStandings });
   } catch (error) {
     const { body, status } = toErrorResponse(error);
     return NextResponse.json(body, { status });

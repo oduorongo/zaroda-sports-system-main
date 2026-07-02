@@ -4,8 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { prisma } from "@/lib/prisma";
-import { formatSecondsToTime } from "@/lib/scoring";
+import { formatSecondsToTime, SPORT_CONFIGS } from "@/lib/scoring";
 import { resolveTeamNames } from "@/lib/match-pool-teams";
+import { computeSingleGameStandings } from "@/lib/team-standings";
 
 export const revalidate = 15;
 
@@ -34,6 +35,7 @@ export default async function GameDetailPage({ params }: { params: { gameId: str
   if (!game || !game.championship.isPublished) notFound();
 
   const teamNames = await resolveTeamNames(game.matchPools.flatMap((mp) => [mp.teamAId, mp.teamBId]));
+  const standings = await computeSingleGameStandings(game.id);
 
   return (
     <div className="container py-16">
@@ -99,35 +101,79 @@ export default async function GameDetailPage({ params }: { params: { gameId: str
           )}
         </div>
       ) : game.matchPools.length > 0 ? (
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>Fixtures</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Round</TableHead>
-                  <TableHead>Match</TableHead>
-                  <TableHead>Score</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {game.matchPools.map((mp) => (
-                  <TableRow key={mp.id}>
-                    <TableCell>{mp.roundName}</TableCell>
-                    <TableCell>
-                      {teamNames.get(mp.teamAId) ?? "Unknown team"} vs {teamNames.get(mp.teamBId) ?? "Unknown team"}
-                    </TableCell>
-                    <TableCell>
-                      {mp.teamAScore ?? "-"} : {mp.teamBScore ?? "-"}
-                    </TableCell>
+        <div className="mt-8 space-y-8">
+          {standings && standings.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Standings</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Team</TableHead>
+                      <TableHead>P</TableHead>
+                      <TableHead>W</TableHead>
+                      <TableHead>D</TableHead>
+                      <TableHead>L</TableHead>
+                      <TableHead>{game.sport ? SPORT_CONFIGS[game.sport].scoreLabel : "Score"} For</TableHead>
+                      <TableHead>{game.sport ? SPORT_CONFIGS[game.sport].scoreLabel : "Score"} Against</TableHead>
+                      <TableHead>+/-</TableHead>
+                      <TableHead>Pts</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {standings.map((row, index) => (
+                      <TableRow key={row.teamId}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell className="font-medium">{row.teamName}</TableCell>
+                        <TableCell>{row.played}</TableCell>
+                        <TableCell>{row.won}</TableCell>
+                        <TableCell>{row.drawn}</TableCell>
+                        <TableCell>{row.lost}</TableCell>
+                        <TableCell>{row.gf}</TableCell>
+                        <TableCell>{row.ga}</TableCell>
+                        <TableCell>{row.gd}</TableCell>
+                        <TableCell className="font-semibold text-gold">{row.points}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Fixtures</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Round</TableHead>
+                    <TableHead>Match</TableHead>
+                    <TableHead>Score</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {game.matchPools.map((mp) => (
+                    <TableRow key={mp.id}>
+                      <TableCell>{mp.roundName}</TableCell>
+                      <TableCell>
+                        {teamNames.get(mp.teamAId) ?? "Unknown team"} vs {teamNames.get(mp.teamBId) ?? "Unknown team"}
+                      </TableCell>
+                      <TableCell>
+                        {mp.teamAScore ?? "-"} : {mp.teamBScore ?? "-"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
       ) : (
         <Card className="mt-8">
           <CardHeader>

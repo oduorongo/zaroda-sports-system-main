@@ -230,6 +230,25 @@ model School {
   @@map("schools")
 }
 
+// A group-stage pool within a game (e.g. "Pool A"). Teams assigned to a pool
+// play a round robin within it; results feed pool standings; qualifying
+// teams then advance to knockout-stage fixtures (recorded as ordinary
+// MatchPool rows with a roundName like "Semi Final" - no separate model
+// needed for the knockout stage itself).
+model Pool {
+  id        String   @id @default(uuid())
+  gameId    String
+  name      String
+  createdAt DateTime @default(now())
+
+  game       Game             @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  teams      TournamentTeam[]
+  matchPools MatchPool[]
+
+  @@index([gameId])
+  @@map("pools")
+}
+
 model TournamentTeam {
   id             String   @id @default(uuid())
   championshipId String
@@ -237,6 +256,8 @@ model TournamentTeam {
   // rather than asked separately. Nullable because the public team_fee
   // self-registration flow (no specific game chosen) doesn't set it.
   gameId         String?
+  // Optional group-stage pool within that game (e.g. "Pool A").
+  poolId         String?
   name           String
   teamCode       String?
   gender         Gender   @default(MIXED)
@@ -250,10 +271,12 @@ model TournamentTeam {
 
   championship Championship     @relation(fields: [championshipId], references: [id], onDelete: Cascade)
   game         Game?            @relation(fields: [gameId], references: [id], onDelete: SetNull)
+  pool         Pool?            @relation(fields: [poolId], references: [id], onDelete: SetNull)
   participants Participant[]
   feePayments  TeamFeePayment[]
 
   @@unique([championshipId, teamCode])
+  @@index([poolId])
   @@map("tournament_teams")
 }
 
@@ -277,6 +300,7 @@ model Game {
   heats           Heat[]
   matchPools      MatchPool[]
   tournamentTeams TournamentTeam[]
+  pools           Pool[]
 
   @@index([championshipId])
   @@map("games")
@@ -356,6 +380,11 @@ model HeatParticipant {
 model MatchPool {
   id         String   @id @default(uuid())
   gameId     String
+  // Set when this fixture was auto-generated as part of a pool's round
+  // robin; null for manually-added fixtures (i.e. the knockout stage).
+  // Lets the UI robustly separate "Pool Stage" from "Knockout Stage"
+  // fixtures without guessing from the free-text roundName.
+  poolId     String?
   roundName  String   @default("Round 1")
   teamAId    String
   teamBId    String
@@ -366,9 +395,11 @@ model MatchPool {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  game Game  @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  pool Pool? @relation(fields: [poolId], references: [id], onDelete: SetNull)
 
   @@index([gameId])
+  @@index([poolId])
   @@map("match_pools")
 }
 

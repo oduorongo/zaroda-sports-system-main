@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatKes } from "@/lib/utils";
 
 const ESSENTIAL_TIERS = [
+  { level: "Base", priceKes: 0 },
   { level: "Zone", priceKes: 580 },
   { level: "Sub-County", priceKes: 1160 },
   { level: "County", priceKes: 2320 },

@@ -9,6 +9,7 @@ import {
   computeStandings,
   pointsForPosition,
   computeSchoolLevelStandings,
+  generateRoundRobinSchedule,
   type MatchResult,
 } from "@/lib/scoring";
 
@@ -240,6 +241,61 @@ describe("computeStandings", () => {
     const results: MatchResult[] = [{ teamAId: "A", teamBId: "B", teamAScore: 3, teamBScore: 3 }];
     const standings = computeStandings(["A", "B"], results, sport);
     expect(standings.every((s) => s.points === 0)).toBe(true);
+  });
+});
+
+function allPairs(teamIds: string[]): Set<string> {
+  const pairs = new Set<string>();
+  for (let i = 0; i < teamIds.length; i++) {
+    for (let j = i + 1; j < teamIds.length; j++) {
+      pairs.add([teamIds[i], teamIds[j]].sort().join("-"));
+    }
+  }
+  return pairs;
+}
+
+describe("generateRoundRobinSchedule", () => {
+  it("schedules every pair exactly once for an even team count, with no byes", () => {
+    const teams = ["A", "B", "C", "D"];
+    const rounds = generateRoundRobinSchedule(teams);
+
+    expect(rounds).toHaveLength(3); // n - 1 rounds
+    expect(rounds.every((r) => r.byeTeamId === undefined)).toBe(true);
+    expect(rounds.every((r) => r.pairs.length === 2)).toBe(true);
+
+    const scheduled = new Set(rounds.flatMap((r) => r.pairs.map((p) => [...p].sort().join("-"))));
+    expect(scheduled).toEqual(allPairs(teams));
+  });
+
+  it("gives every team exactly one bye per round for an odd team count", () => {
+    const teams = ["A", "B", "C"];
+    const rounds = generateRoundRobinSchedule(teams);
+
+    expect(rounds).toHaveLength(3); // n rounds when odd (padded to 4 slots -> 3 rounds)
+    expect(rounds.every((r) => r.pairs.length === 1)).toBe(true);
+    expect(rounds.every((r) => r.byeTeamId !== undefined)).toBe(true);
+
+    const byeCounts = new Map<string, number>();
+    for (const round of rounds) {
+      if (round.byeTeamId) byeCounts.set(round.byeTeamId, (byeCounts.get(round.byeTeamId) ?? 0) + 1);
+    }
+    expect(teams.every((t) => byeCounts.get(t) === 1)).toBe(true);
+
+    const scheduled = new Set(rounds.flatMap((r) => r.pairs.map((p) => [...p].sort().join("-"))));
+    expect(scheduled).toEqual(allPairs(teams));
+  });
+
+  it("covers every pair exactly once for a larger odd count (5 teams)", () => {
+    const teams = ["A", "B", "C", "D", "E"];
+    const rounds = generateRoundRobinSchedule(teams);
+    const scheduled = rounds.flatMap((r) => r.pairs.map((p) => [...p].sort().join("-")));
+    expect(new Set(scheduled)).toEqual(allPairs(teams));
+    expect(scheduled).toHaveLength(allPairs(teams).size); // no duplicate pairings
+  });
+
+  it("returns no rounds for fewer than 2 teams", () => {
+    expect(generateRoundRobinSchedule([])).toEqual([]);
+    expect(generateRoundRobinSchedule(["A"])).toEqual([]);
   });
 });
 

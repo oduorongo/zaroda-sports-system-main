@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext, isSuperAdmin, hasRole, toErrorResponse } from "@/lib/authorize";
+import { computeChampionshipTeamStandings } from "@/lib/team-standings";
 
 interface MedalRow {
   entityId: string;
@@ -50,6 +51,26 @@ export async function GET(request: Request) {
       if (p.position === 1) row.gold++;
       else if (p.position === 2) row.silver++;
       else if (p.position === 3) row.bronze++;
+    }
+
+    // Ball-games/indoor-games team fixtures don't produce Participant rows,
+    // so a team's game-topping finish would otherwise never earn a medal.
+    // A game only counts once at least one of its fixtures has been played
+    // (there's no explicit "pool concluded" flag on Game/MatchPool yet).
+    const teamStandings = await computeChampionshipTeamStandings(championshipId);
+    for (const game of teamStandings) {
+      const played = game.standings.filter((s) => s.played > 0);
+      if (played.length === 0) continue;
+
+      const medalPositions: Array<keyof Pick<MedalRow, "gold" | "silver" | "bronze">> = ["gold", "silver", "bronze"];
+      played.slice(0, 3).forEach((row, index) => {
+        const medal = medalPositions[index];
+        if (!medal) return;
+        if (!rows.has(row.teamId)) {
+          rows.set(row.teamId, { entityId: row.teamId, entityName: row.teamName, gold: 0, silver: 0, bronze: 0 });
+        }
+        (rows.get(row.teamId) as MedalRow)[medal]++;
+      });
     }
 
     const medalTable = Array.from(rows.values())

@@ -194,6 +194,7 @@ export const paymentVerifySchema = z.object({
 export const tournamentTeamSchema = z.object({
   championshipId: z.string().uuid(),
   gameId: z.string().uuid().nullable().optional(),
+  poolId: z.string().uuid().nullable().optional(),
   name: z.string().min(1).max(200),
   teamCode: z.string().max(50).nullable().optional(),
   teamColor: z.string().max(30).nullable().optional(),
@@ -209,6 +210,20 @@ export type TournamentTeamInput = z.infer<typeof tournamentTeamSchema>;
 export const dashboardTournamentTeamSchema = tournamentTeamSchema.extend({
   gameId: z.string().uuid("Select a game for this team"),
 });
+
+export const poolSchema = z.object({
+  gameId: z.string().uuid(),
+  name: z.string().min(1).max(100),
+});
+export type PoolInput = z.infer<typeof poolSchema>;
+
+// Schedules a full round robin (bye-aware for odd counts) either within one
+// pool, or across every team registered for the game when poolId is omitted.
+export const generateFixturesSchema = z.object({
+  gameId: z.string().uuid(),
+  poolId: z.string().uuid().nullable().optional(),
+});
+export type GenerateFixturesInput = z.infer<typeof generateFixturesSchema>;
 
 // Bulk-registers a list of participating organizations/schools as a team in
 // every game the championship already has (e.g. 15 schools x 16 games ->

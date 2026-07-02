@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PanelErrorBoundary } from "@/components/error-boundary";
 import { apiGet } from "@/lib/api-client";
@@ -22,7 +23,73 @@ interface RankingRow {
   position: number;
 }
 
+interface TeamStandingRow {
+  teamId: string;
+  teamName: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  gf: number;
+  ga: number;
+  gd: number;
+  points: number;
+}
+
+interface GameStandings {
+  gameId: string;
+  gameName: string;
+  gender: string;
+  sport: string;
+  standings: TeamStandingRow[];
+}
+
 const SCHOOL_LEVEL_FILTERS = [{ value: "OVERALL", label: "Overall" }, ...GAME_SCHOOL_LEVELS];
+
+function TeamStandingsTable({ game }: { game: GameStandings }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">{game.gameName}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>#</TableHead>
+              <TableHead>Team</TableHead>
+              <TableHead>P</TableHead>
+              <TableHead>W</TableHead>
+              <TableHead>D</TableHead>
+              <TableHead>L</TableHead>
+              <TableHead>+/-</TableHead>
+              <TableHead>Pts</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {game.standings.map((row, index) => (
+              <TableRow key={row.teamId}>
+                <TableCell>{index + 1}</TableCell>
+                <TableCell className="font-medium">{row.teamName}</TableCell>
+                <TableCell>{row.played}</TableCell>
+                <TableCell>{row.won}</TableCell>
+                <TableCell>{row.drawn}</TableCell>
+                <TableCell>{row.lost}</TableCell>
+                <TableCell>{row.gd}</TableCell>
+                <TableCell className="font-semibold text-gold">{row.points}</TableCell>
+              </TableRow>
+            ))}
+            {game.standings.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center text-muted">No fixtures played yet.</TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
 
 function StandingsTable({ championshipId }: { championshipId: string }) {
   const [schoolLevel, setSchoolLevel] = React.useState("OVERALL");
@@ -30,10 +97,13 @@ function StandingsTable({ championshipId }: { championshipId: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ["rankings", championshipId, schoolLevel],
     queryFn: () =>
-      apiGet<{ standings: RankingRow[] }>(
+      apiGet<{ standings: RankingRow[]; teamStandings: GameStandings[] }>(
         `/api/rankings?championshipId=${championshipId}&schoolLevel=${schoolLevel}`,
       ),
   });
+
+  const teamStandings = data?.teamStandings ?? [];
+  const athleticsStandings = data?.standings ?? [];
 
   return (
     <div className="space-y-4">
@@ -54,7 +124,15 @@ function StandingsTable({ championshipId }: { championshipId: string }) {
 
       {isLoading && <p className="text-muted">Loading standings...</p>}
 
-      {!isLoading && (
+      {!isLoading && teamStandings.length > 0 && (
+        <div className="space-y-6">
+          {teamStandings.map((game) => (
+            <TeamStandingsTable key={game.gameId} game={game} />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && teamStandings.length === 0 && (
         <Table>
           <TableHeader>
             <TableRow>
@@ -70,7 +148,7 @@ function StandingsTable({ championshipId }: { championshipId: string }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(data?.standings ?? []).map((row) => (
+            {athleticsStandings.map((row) => (
               <TableRow key={row.schoolId}>
                 <TableCell>{row.position}</TableCell>
                 <TableCell className="font-medium">{row.schoolName}</TableCell>
@@ -83,7 +161,7 @@ function StandingsTable({ championshipId }: { championshipId: string }) {
                 <TableCell className="font-semibold text-gold">{row.grandTotal}</TableCell>
               </TableRow>
             ))}
-            {(data?.standings ?? []).length === 0 && (
+            {athleticsStandings.length === 0 && (
               <TableRow>
                 <TableCell colSpan={9} className="text-center text-muted">
                   No final results yet.

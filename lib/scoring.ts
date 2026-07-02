@@ -309,6 +309,61 @@ function sortStandings(rows: StandingRow[], results: MatchResult[], config: Spor
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Ball games: pool round-robin scheduling
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface RoundRobinRound {
+  round: number;
+  pairs: Array<[string, string]>;
+  /** The team sitting out this round, only present when the team count is odd. */
+  byeTeamId?: string;
+}
+
+const BYE = Symbol("bye");
+
+/**
+ * Schedules a full round robin (every team plays every other team exactly
+ * once) into rounds using the standard circle method. With an odd number of
+ * teams, one team sits out (byeTeamId) each round - this is the only case
+ * that needs a bye; with an even count every round is fully paired.
+ */
+export function generateRoundRobinSchedule(teamIds: string[]): RoundRobinRound[] {
+  if (teamIds.length < 2) return [];
+
+  const slots: Array<string | typeof BYE> = [...teamIds];
+  if (slots.length % 2 !== 0) slots.push(BYE);
+
+  const n = slots.length;
+  const rounds: RoundRobinRound[] = [];
+  let arrangement = [...slots];
+
+  for (let round = 1; round <= n - 1; round++) {
+    const pairs: Array<[string, string]> = [];
+    let byeTeamId: string | undefined;
+
+    for (let i = 0; i < n / 2; i++) {
+      const a = arrangement[i];
+      const b = arrangement[n - 1 - i];
+      if (a === undefined || b === undefined) continue;
+      if (a === BYE) byeTeamId = b as string;
+      else if (b === BYE) byeTeamId = a;
+      else pairs.push([a, b]);
+    }
+
+    rounds.push({ round, pairs, byeTeamId });
+
+    // Rotate: keep the first slot fixed, cycle everyone else by one position.
+    const [fixed, ...rest] = arrangement;
+    const last = rest.pop();
+    if (fixed !== undefined && last !== undefined) {
+      arrangement = [fixed, last, ...rest];
+    }
+  }
+
+  return rounds;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Cross-cutting: placing → ranking points, and per-school-level standings
 // ─────────────────────────────────────────────────────────────────────────
 
