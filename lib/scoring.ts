@@ -302,33 +302,27 @@ export function pointsForPosition(position: number): number {
   return POSITION_POINTS[position] ?? 0;
 }
 
-export type SchoolLevelCategory = "PRIMARY" | "JUNIOR_SECONDARY" | "SECONDARY";
+export type SchoolLevelCategory = "PRIMARY_JS" | "SENIOR_SCHOOL" | "TERTIARY";
 
 export interface EventPlacing {
   schoolId: string;
   position: number;
   schoolLevel: SchoolLevelCategory;
-  /** true if the event is open to both Primary and Junior Secondary levels */
-  isPrimaryJunior?: boolean;
 }
 
 export interface LevelStandings {
-  PRIMARY: Map<string, number>;
-  JUNIOR_SECONDARY: Map<string, number>;
-  SECONDARY: Map<string, number>;
+  PRIMARY_JS: Map<string, number>;
+  SENIOR_SCHOOL: Map<string, number>;
+  TERTIARY: Map<string, number>;
   OVERALL: Map<string, number>;
 }
 
-/**
- * Aggregates event placings into per-school-level standings plus a combined
- * OVERALL table. `primary_junior` events credit points to both the PRIMARY
- * and JUNIOR_SECONDARY tables, but are only added to OVERALL once.
- */
+/** Aggregates event placings into per-school-level standings plus a combined OVERALL table. */
 export function computeSchoolLevelStandings(placings: EventPlacing[]): LevelStandings {
   const standings: LevelStandings = {
-    PRIMARY: new Map(),
-    JUNIOR_SECONDARY: new Map(),
-    SECONDARY: new Map(),
+    PRIMARY_JS: new Map(),
+    SENIOR_SCHOOL: new Map(),
+    TERTIARY: new Map(),
     OVERALL: new Map(),
   };
 
@@ -340,15 +334,7 @@ export function computeSchoolLevelStandings(placings: EventPlacing[]): LevelStan
     const points = pointsForPosition(placing.position);
     if (points === 0) continue;
 
-    if (placing.isPrimaryJunior) {
-      addPoints(standings.PRIMARY, placing.schoolId, points);
-      addPoints(standings.JUNIOR_SECONDARY, placing.schoolId, points);
-    } else {
-      addPoints(standings[placing.schoolLevel], placing.schoolId, points);
-    }
-
-    // Credited once to the grand total regardless of how many per-level
-    // tables the placing above was fanned out into.
+    addPoints(standings[placing.schoolLevel], placing.schoolId, points);
     addPoints(standings.OVERALL, placing.schoolId, points);
   }
 

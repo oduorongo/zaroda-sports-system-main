@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiGet } from "@/lib/api-client";
+import { SCHOOL_LEVELS } from "@/lib/school-levels";
 
 interface RankingRow {
   position: number;
@@ -16,12 +17,7 @@ interface RankingRow {
   grandTotal: number;
 }
 
-const SCHOOL_LEVELS = [
-  { value: "OVERALL", label: "Overall" },
-  { value: "PRIMARY", label: "Primary" },
-  { value: "JUNIOR_SECONDARY", label: "Junior Secondary" },
-  { value: "SECONDARY", label: "Secondary" },
-];
+const SCHOOL_LEVEL_FILTERS = [{ value: "OVERALL", label: "Overall" }, ...SCHOOL_LEVELS];
 
 export function ReportsPanel({ championshipId, championshipName }: { championshipId: string; championshipName: string }) {
   const [schoolLevel, setSchoolLevel] = React.useState("OVERALL");
@@ -63,7 +59,7 @@ export function ReportsPanel({ championshipId, championshipName }: { championshi
           <Select value={schoolLevel} onValueChange={setSchoolLevel}>
             <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {SCHOOL_LEVELS.map((level) => (
+              {SCHOOL_LEVEL_FILTERS.map((level) => (
                 <SelectItem key={level.value} value={level.value}>{level.label}</SelectItem>
               ))}
             </SelectContent>

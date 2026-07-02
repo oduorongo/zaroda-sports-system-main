@@ -3,7 +3,7 @@ import { z } from "zod";
 export const accountTypeSchema = z.enum(["SCHOOL", "OPEN_TOURNAMENT"]);
 export const gameCategorySchema = z.enum(["BALL_GAMES", "ATHLETICS", "MUSIC", "OTHER_GAMES"]);
 export const levelSchema = z.enum(["BASE", "ZONE", "SUB_COUNTY", "COUNTY", "REGIONAL", "NATIONAL"]);
-export const schoolLevelSchema = z.enum(["PRIMARY", "JUNIOR_SECONDARY", "SECONDARY"]);
+export const schoolLevelSchema = z.enum(["PRIMARY_JS", "SENIOR_SCHOOL", "TERTIARY"]);
 export const genderSchema = z.enum(["BOYS", "GIRLS", "MIXED"]);
 export const participantStatusSchema = z.enum(["REGISTERED", "CONFIRMED_IN_CALL_ROOM", "DISQUALIFIED"]);
 
@@ -70,7 +70,6 @@ export const gameCreateSchema = z.object({
   maxQualifiers: z.number().int().min(1).max(50).default(5),
   raceType: z.string().max(100).nullable().optional(),
   scheduledDate: z.coerce.date().nullable().optional(),
-  isPrimaryJunior: z.boolean().default(false),
 });
 export type GameCreateInput = z.infer<typeof gameCreateSchema>;
 

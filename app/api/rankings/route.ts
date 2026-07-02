@@ -16,14 +16,13 @@ interface RankingRow {
 /**
  * Aggregate standings for a championship, matching the county/regional
  * summary format: Track / Field / Grand Total, split Boys / Girls / Total,
- * filterable by school level. `primary_junior` events credit both the
- * PRIMARY and JUNIOR_SECONDARY views but never double into a single view.
+ * filterable by school level (PRIMARY_JS | SENIOR_SCHOOL | TERTIARY | OVERALL).
  */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const championshipId = searchParams.get("championshipId");
-    const schoolLevelParam = searchParams.get("schoolLevel"); // PRIMARY | JUNIOR_SECONDARY | SECONDARY | null=OVERALL
+    const schoolLevelParam = searchParams.get("schoolLevel"); // PRIMARY_JS | SENIOR_SCHOOL | TERTIARY | null=OVERALL
     if (!championshipId) return NextResponse.json({ error: "championshipId is required" }, { status: 400 });
 
     const championship = await prisma.championship.findUnique({ where: { id: championshipId } });
@@ -38,7 +37,7 @@ export async function GET(request: Request) {
     const participants = await prisma.participant.findMany({
       where: { championshipId, position: { not: null } },
       include: {
-        game: { select: { schoolLevel: true, isPrimaryJunior: true, isTimed: true } },
+        game: { select: { schoolLevel: true, isTimed: true } },
         school: { select: { id: true, name: true } },
         tournamentTeam: { select: { id: true, name: true } },
       },
@@ -51,10 +50,7 @@ export async function GET(request: Request) {
       if (!entityId || p.position === null) continue;
 
       const matchesLevel =
-        !schoolLevelParam ||
-        schoolLevelParam === "OVERALL" ||
-        p.game.schoolLevel === schoolLevelParam ||
-        (p.game.isPrimaryJunior && (schoolLevelParam === "PRIMARY" || schoolLevelParam === "JUNIOR_SECONDARY"));
+        !schoolLevelParam || schoolLevelParam === "OVERALL" || p.game.schoolLevel === schoolLevelParam;
       if (!matchesLevel) continue;
 
       const points = pointsForPosition(p.position);

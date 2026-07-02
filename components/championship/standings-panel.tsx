@@ -6,6 +6,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PanelErrorBoundary } from "@/components/error-boundary";
 import { apiGet } from "@/lib/api-client";
+import { SCHOOL_LEVELS } from "@/lib/school-levels";
 
 interface RankingRow {
   schoolId: string;
@@ -21,12 +22,7 @@ interface RankingRow {
   position: number;
 }
 
-const SCHOOL_LEVELS = [
-  { value: "OVERALL", label: "Overall" },
-  { value: "PRIMARY", label: "Primary" },
-  { value: "JUNIOR_SECONDARY", label: "Junior Secondary" },
-  { value: "SECONDARY", label: "Secondary" },
-];
+const SCHOOL_LEVEL_FILTERS = [{ value: "OVERALL", label: "Overall" }, ...SCHOOL_LEVELS];
 
 function StandingsTable({ championshipId }: { championshipId: string }) {
   const [schoolLevel, setSchoolLevel] = React.useState("OVERALL");
@@ -47,7 +43,7 @@ function StandingsTable({ championshipId }: { championshipId: string }) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {SCHOOL_LEVELS.map((level) => (
+            {SCHOOL_LEVEL_FILTERS.map((level) => (
               <SelectItem key={level.value} value={level.value}>
                 {level.label}
               </SelectItem>

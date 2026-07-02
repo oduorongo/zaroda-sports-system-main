@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { championshipCreateSchema, type ChampionshipCreateInput } from "@/lib/validations";
 import { apiGet, apiPost } from "@/lib/api-client";
+import { SCHOOL_LEVELS } from "@/lib/school-levels";
 
 interface TenantOption {
   id: string;
@@ -20,7 +21,6 @@ interface TenantOption {
 }
 
 const LEVELS = ["BASE", "ZONE", "SUB_COUNTY", "COUNTY", "REGIONAL", "NATIONAL"];
-const SCHOOL_LEVELS = ["PRIMARY", "JUNIOR_SECONDARY", "SECONDARY"];
 const CATEGORIES = ["BALL_GAMES", "ATHLETICS", "MUSIC", "OTHER_GAMES"];
 
 export default function AdminNewChampionshipPage() {
@@ -41,7 +41,7 @@ export default function AdminNewChampionshipPage() {
     formState: { errors },
   } = useForm<ChampionshipCreateInput>({
     resolver: zodResolver(championshipCreateSchema),
-    defaultValues: { level: "BASE", schoolLevel: "PRIMARY", category: "ATHLETICS", isPublished: false },
+    defaultValues: { level: "BASE", schoolLevel: "PRIMARY_JS", category: "ATHLETICS", isPublished: false },
   });
 
   async function onSubmit(values: ChampionshipCreateInput) {
@@ -109,7 +109,7 @@ export default function AdminNewChampionshipPage() {
                   <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {SCHOOL_LEVELS.map((l) => (
-                      <SelectItem key={l} value={l}>{l.replace("_", " ")}</SelectItem>
+                      <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

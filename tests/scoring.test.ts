@@ -250,35 +250,42 @@ describe("pointsForPosition", () => {
 describe("computeSchoolLevelStandings", () => {
   it("credits a normal placing to only its own school-level table and to overall once", () => {
     const standings = computeSchoolLevelStandings([
-      { schoolId: "school-a", position: 1, schoolLevel: "SECONDARY" },
+      { schoolId: "school-a", position: 1, schoolLevel: "SENIOR_SCHOOL" },
     ]);
-    expect(standings.SECONDARY.get("school-a")).toBe(7);
-    expect(standings.PRIMARY.get("school-a")).toBeUndefined();
+    expect(standings.SENIOR_SCHOOL.get("school-a")).toBe(7);
+    expect(standings.PRIMARY_JS.get("school-a")).toBeUndefined();
     expect(standings.OVERALL.get("school-a")).toBe(7);
   });
 
-  it("credits a primary_junior placing to both Primary and Junior Secondary, but only once to Overall", () => {
+  it("credits a Primary/JS placing to the Primary/JS table and to Overall once", () => {
     const standings = computeSchoolLevelStandings([
-      { schoolId: "school-a", position: 2, schoolLevel: "PRIMARY", isPrimaryJunior: true },
+      { schoolId: "school-a", position: 2, schoolLevel: "PRIMARY_JS" },
     ]);
-    expect(standings.PRIMARY.get("school-a")).toBe(5);
-    expect(standings.JUNIOR_SECONDARY.get("school-a")).toBe(5);
-    expect(standings.SECONDARY.get("school-a")).toBeUndefined();
-    // Not double-counted: overall reflects the single placing's points once, not 5+5.
+    expect(standings.PRIMARY_JS.get("school-a")).toBe(5);
+    expect(standings.SENIOR_SCHOOL.get("school-a")).toBeUndefined();
+    expect(standings.TERTIARY.get("school-a")).toBeUndefined();
     expect(standings.OVERALL.get("school-a")).toBe(5);
+  });
+
+  it("credits a Tertiary placing to the Tertiary table and to Overall once", () => {
+    const standings = computeSchoolLevelStandings([
+      { schoolId: "school-a", position: 3, schoolLevel: "TERTIARY" },
+    ]);
+    expect(standings.TERTIARY.get("school-a")).toBe(4);
+    expect(standings.OVERALL.get("school-a")).toBe(4);
   });
 
   it("accumulates points across multiple placings for the same school", () => {
     const standings = computeSchoolLevelStandings([
-      { schoolId: "school-a", position: 1, schoolLevel: "SECONDARY" },
-      { schoolId: "school-a", position: 3, schoolLevel: "SECONDARY" },
+      { schoolId: "school-a", position: 1, schoolLevel: "SENIOR_SCHOOL" },
+      { schoolId: "school-a", position: 3, schoolLevel: "SENIOR_SCHOOL" },
     ]);
-    expect(standings.SECONDARY.get("school-a")).toBe(7 + 4);
+    expect(standings.SENIOR_SCHOOL.get("school-a")).toBe(7 + 4);
     expect(standings.OVERALL.get("school-a")).toBe(7 + 4);
   });
 
   it("ignores placings outside the scoring positions", () => {
-    const standings = computeSchoolLevelStandings([{ schoolId: "school-a", position: 8, schoolLevel: "SECONDARY" }]);
+    const standings = computeSchoolLevelStandings([{ schoolId: "school-a", position: 8, schoolLevel: "SENIOR_SCHOOL" }]);
     expect(standings.OVERALL.has("school-a")).toBe(false);
   });
 });

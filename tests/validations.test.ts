@@ -51,7 +51,7 @@ describe("championshipCreateSchema", () => {
   const base = {
     name: "Zone Athletics Championship",
     level: "ZONE" as const,
-    schoolLevel: "SECONDARY" as const,
+    schoolLevel: "SENIOR_SCHOOL" as const,
     category: "ATHLETICS" as const,
     county: "Nairobi",
     location: "Nairobi Stadium",

@@ -55,13 +55,13 @@ describe("full athletics event flow", () => {
     const placings = ranked.map((r) => ({
       schoolId: r.participantId.includes("alliance") ? "alliance" : "starehe",
       position: r.position,
-      schoolLevel: "SECONDARY" as const,
+      schoolLevel: "SENIOR_SCHOOL" as const,
     }));
     const standings = computeSchoolLevelStandings(placings);
 
     // 1st (7) + 2nd (5) for Alliance's two finishers, 3rd (4) for Starehe.
-    expect(standings.SECONDARY.get("alliance")).toBe(pointsForPosition(1) + pointsForPosition(2));
-    expect(standings.SECONDARY.get("starehe")).toBe(pointsForPosition(3));
+    expect(standings.SENIOR_SCHOOL.get("alliance")).toBe(pointsForPosition(1) + pointsForPosition(2));
+    expect(standings.SENIOR_SCHOOL.get("starehe")).toBe(pointsForPosition(3));
     expect(standings.OVERALL.get("alliance")).toBe(12);
   });
 
@@ -82,7 +82,7 @@ describe("full athletics event flow", () => {
     const placings = standings.map((row, index) => ({
       schoolId: row.teamId,
       position: index + 1,
-      schoolLevel: "SECONDARY" as const,
+      schoolLevel: "SENIOR_SCHOOL" as const,
     }));
     const schoolStandings = computeSchoolLevelStandings(placings);
     const totalOverall = Array.from(schoolStandings.OVERALL.values()).reduce((a, b) => a + b, 0);

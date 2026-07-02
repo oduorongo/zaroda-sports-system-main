@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { gameCreateSchema, type GameCreateInput } from "@/lib/validations";
 import { apiGet, apiPost } from "@/lib/api-client";
+import { SCHOOL_LEVELS } from "@/lib/school-levels";
 
 interface GameRow {
   id: string;
@@ -23,13 +24,11 @@ interface GameRow {
   gender: string;
   schoolLevel: string;
   isTimed: boolean;
-  isPrimaryJunior: boolean;
   maxQualifiers: number;
   _count: { participants: number; heats: number; matchPools: number };
 }
 
 const GENDERS = ["BOYS", "GIRLS", "MIXED"];
-const SCHOOL_LEVELS = ["PRIMARY", "JUNIOR_SECONDARY", "SECONDARY"];
 const CATEGORIES = ["BALL_GAMES", "ATHLETICS", "MUSIC", "OTHER_GAMES"];
 
 export function GamesPanel({ championshipId, category }: { championshipId: string; category: string }) {
@@ -54,10 +53,9 @@ export function GamesPanel({ championshipId, category }: { championshipId: strin
       championshipId,
       category: category as GameCreateInput["category"],
       gender: "BOYS",
-      schoolLevel: "SECONDARY",
+      schoolLevel: "SENIOR_SCHOOL",
       isTimed: category === "ATHLETICS",
       maxQualifiers: 5,
-      isPrimaryJunior: false,
     },
   });
 
@@ -110,7 +108,7 @@ export function GamesPanel({ championshipId, category }: { championshipId: strin
                     <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {SCHOOL_LEVELS.map((l) => (
-                        <SelectItem key={l} value={l}>{l.replace("_", " ")}</SelectItem>
+                        <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -141,9 +139,6 @@ export function GamesPanel({ championshipId, category }: { championshipId: strin
               <div className="flex items-center gap-4">
                 <label className="flex items-center gap-2 text-sm text-foreground">
                   <input type="checkbox" {...register("isTimed")} /> Timed event (athletics track)
-                </label>
-                <label className="flex items-center gap-2 text-sm text-foreground">
-                  <input type="checkbox" {...register("isPrimaryJunior")} /> Open to Primary + Junior Secondary
                 </label>
               </div>
               <Button type="submit" className="w-full" disabled={createMutation.isPending}>
