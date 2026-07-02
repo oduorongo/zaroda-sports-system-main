@@ -253,18 +253,26 @@ describe("computeSchoolLevelStandings", () => {
       { schoolId: "school-a", position: 1, schoolLevel: "SENIOR_SCHOOL" },
     ]);
     expect(standings.SENIOR_SCHOOL.get("school-a")).toBe(7);
-    expect(standings.PRIMARY_JS.get("school-a")).toBeUndefined();
+    expect(standings.PRIMARY.get("school-a")).toBeUndefined();
     expect(standings.OVERALL.get("school-a")).toBe(7);
   });
 
-  it("credits a Primary/JS placing to the Primary/JS table and to Overall once", () => {
+  it("credits a Primary placing to the Primary table and to Overall once", () => {
     const standings = computeSchoolLevelStandings([
-      { schoolId: "school-a", position: 2, schoolLevel: "PRIMARY_JS" },
+      { schoolId: "school-a", position: 2, schoolLevel: "PRIMARY" },
     ]);
-    expect(standings.PRIMARY_JS.get("school-a")).toBe(5);
+    expect(standings.PRIMARY.get("school-a")).toBe(5);
+    expect(standings.JS.get("school-a")).toBeUndefined();
     expect(standings.SENIOR_SCHOOL.get("school-a")).toBeUndefined();
     expect(standings.TERTIARY.get("school-a")).toBeUndefined();
     expect(standings.OVERALL.get("school-a")).toBe(5);
+  });
+
+  it("credits a JS placing to the JS table and to Overall once", () => {
+    const standings = computeSchoolLevelStandings([{ schoolId: "school-a", position: 1, schoolLevel: "JS" }]);
+    expect(standings.JS.get("school-a")).toBe(7);
+    expect(standings.PRIMARY.get("school-a")).toBeUndefined();
+    expect(standings.OVERALL.get("school-a")).toBe(7);
   });
 
   it("credits a Tertiary placing to the Tertiary table and to Overall once", () => {

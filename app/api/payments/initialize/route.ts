@@ -83,6 +83,7 @@ export async function POST(request: Request) {
           championshipId: fee.championshipId,
           name: input.teamName,
           teamCode: input.teamCode,
+          gender: input.teamGender ?? "MIXED",
           contactName: input.contactName ?? null,
           contactEmail: input.contactEmail ?? null,
           contactPhone: input.contactPhone ?? null,

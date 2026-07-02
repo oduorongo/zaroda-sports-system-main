@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { PanelErrorBoundary } from "@/components/error-boundary";
 import { GamesPanel } from "@/components/dashboard/games-panel";
 import { ParticipantsPanel } from "@/components/dashboard/participants-panel";
+import { TeamsPanel } from "@/components/dashboard/teams-panel";
 import { CallRoomPanel } from "@/components/dashboard/call-room-panel";
 import { BibRangesPanel } from "@/components/dashboard/bib-ranges-panel";
 import { ReportsPanel } from "@/components/dashboard/reports-panel";
@@ -18,11 +19,13 @@ export function ChampionshipManager({
   championshipId,
   name,
   category,
+  schoolLevel,
   isPublished,
 }: {
   championshipId: string;
   name: string;
   category: string;
+  schoolLevel: string;
   isPublished: boolean;
 }) {
   const router = useRouter();
@@ -57,6 +60,7 @@ export function ChampionshipManager({
         <TabsList className="flex-wrap">
           <TabsTrigger value="games">Games</TabsTrigger>
           <TabsTrigger value="participants">Participants</TabsTrigger>
+          <TabsTrigger value="teams">Teams</TabsTrigger>
           <TabsTrigger value="call-room">Call Room</TabsTrigger>
           <TabsTrigger value="bib-ranges">Bib Ranges</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
@@ -64,13 +68,19 @@ export function ChampionshipManager({
 
         <TabsContent value="games">
           <PanelErrorBoundary fallbackTitle="Games panel failed to load">
-            <GamesPanel championshipId={championshipId} category={category} />
+            <GamesPanel championshipId={championshipId} category={category} championshipSchoolLevel={schoolLevel} />
           </PanelErrorBoundary>
         </TabsContent>
 
         <TabsContent value="participants">
           <PanelErrorBoundary fallbackTitle="Participants panel failed to load">
             <ParticipantsPanel championshipId={championshipId} />
+          </PanelErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="teams">
+          <PanelErrorBoundary fallbackTitle="Teams panel failed to load">
+            <TeamsPanel championshipId={championshipId} />
           </PanelErrorBoundary>
         </TabsContent>
 

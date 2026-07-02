@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   signupSchema,
   championshipCreateSchema,
+  gameCreateSchema,
+  tournamentTeamSchema,
   timeInputSchema,
   bibRangeSchema,
   paymentInitializeSchema,
@@ -66,6 +68,45 @@ describe("championshipCreateSchema", () => {
 
   it("rejects an end date before the start date", () => {
     const result = championshipCreateSchema.safeParse({ ...base, startDate: "2026-08-05", endDate: "2026-08-01" });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("gameCreateSchema", () => {
+  const base = {
+    championshipId: "11111111-1111-1111-1111-111111111111",
+    name: "100m Final",
+    category: "ATHLETICS" as const,
+    gender: "BOYS" as const,
+    isTimed: true,
+    maxQualifiers: 5,
+  };
+
+  it.each(["PRIMARY", "JS", "SENIOR_SCHOOL", "TERTIARY"])("accepts game-level %s", (schoolLevel) => {
+    expect(gameCreateSchema.safeParse({ ...base, schoolLevel }).success).toBe(true);
+  });
+
+  it("rejects the championship-only PRIMARY_JS value on a game", () => {
+    const result = gameCreateSchema.safeParse({ ...base, schoolLevel: "PRIMARY_JS" });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("tournamentTeamSchema", () => {
+  const base = {
+    championshipId: "11111111-1111-1111-1111-111111111111",
+    name: "Thunder FC",
+    teamCode: "THU",
+    gender: "BOYS" as const,
+  };
+
+  it("accepts a valid team payload with gender", () => {
+    expect(tournamentTeamSchema.safeParse(base).success).toBe(true);
+  });
+
+  it("rejects a team payload missing gender", () => {
+    const { gender: _gender, ...withoutGender } = base;
+    const result = tournamentTeamSchema.safeParse(withoutGender);
     expect(result.success).toBe(false);
   });
 });

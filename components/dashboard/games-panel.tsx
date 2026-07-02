@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { gameCreateSchema, type GameCreateInput } from "@/lib/validations";
 import { apiGet, apiPost } from "@/lib/api-client";
-import { SCHOOL_LEVELS } from "@/lib/school-levels";
+import { GAME_SCHOOL_LEVELS, gameSchoolLevelLabel } from "@/lib/school-levels";
 
 interface GameRow {
   id: string;
@@ -31,9 +31,24 @@ interface GameRow {
 const GENDERS = ["BOYS", "GIRLS", "MIXED"];
 const CATEGORIES = ["BALL_GAMES", "ATHLETICS", "MUSIC", "OTHER_GAMES"];
 
-export function GamesPanel({ championshipId, category }: { championshipId: string; category: string }) {
+// A championship's schoolLevel is a single pricing tier (Primary/JS bundled,
+// Senior School, or Tertiary). Only a PRIMARY_JS championship needs a
+// per-game choice - Senior School and Tertiary championships have exactly
+// one valid game-level value each, so the field is hidden and auto-set.
+const PRIMARY_JS_GAME_LEVELS = GAME_SCHOOL_LEVELS.filter((l) => l.value === "PRIMARY" || l.value === "JS");
+
+export function GamesPanel({
+  championshipId,
+  category,
+  championshipSchoolLevel,
+}: {
+  championshipId: string;
+  category: string;
+  championshipSchoolLevel: string;
+}) {
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
+  const needsLevelChoice = championshipSchoolLevel === "PRIMARY_JS";
 
   const { data, isLoading } = useQuery({
     queryKey: ["games", championshipId],
@@ -53,7 +68,7 @@ export function GamesPanel({ championshipId, category }: { championshipId: strin
       championshipId,
       category: category as GameCreateInput["category"],
       gender: "BOYS",
-      schoolLevel: "SENIOR_SCHOOL",
+      schoolLevel: needsLevelChoice ? "PRIMARY" : (championshipSchoolLevel as GameCreateInput["schoolLevel"]),
       isTimed: category === "ATHLETICS",
       maxQualifiers: 5,
     },
@@ -102,17 +117,19 @@ export function GamesPanel({ championshipId, category }: { championshipId: strin
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label>School level</Label>
-                  <Select value={watch("schoolLevel")} onValueChange={(v) => setValue("schoolLevel", v as GameCreateInput["schoolLevel"])}>
-                    <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {SCHOOL_LEVELS.map((l) => (
-                        <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {needsLevelChoice && (
+                  <div>
+                    <Label>School level</Label>
+                    <Select value={watch("schoolLevel")} onValueChange={(v) => setValue("schoolLevel", v as GameCreateInput["schoolLevel"])}>
+                      <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PRIMARY_JS_GAME_LEVELS.map((l) => (
+                          <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -156,7 +173,7 @@ export function GamesPanel({ championshipId, category }: { championshipId: strin
             <div>
               <p className="font-medium text-foreground">{game.name}</p>
               <p className="text-sm text-muted">
-                {game.gender} - {game.schoolLevel.replace("_", " ")} - {game._count.participants} participants
+                {game.gender} - {gameSchoolLevelLabel(game.schoolLevel)} - {game._count.participants} participants
               </p>
             </div>
             <Badge variant={game.isTimed ? "secondary" : "outline"}>{game.isTimed ? "Timed" : "Scored"}</Badge>

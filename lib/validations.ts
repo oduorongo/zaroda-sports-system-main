@@ -3,7 +3,13 @@ import { z } from "zod";
 export const accountTypeSchema = z.enum(["SCHOOL", "OPEN_TOURNAMENT"]);
 export const gameCategorySchema = z.enum(["BALL_GAMES", "ATHLETICS", "MUSIC", "OTHER_GAMES"]);
 export const levelSchema = z.enum(["BASE", "ZONE", "SUB_COUNTY", "COUNTY", "REGIONAL", "NATIONAL"]);
+// Championship.schoolLevel is the subscription/pricing tier - only ever one of
+// these three values (Primary and Junior Secondary are bundled as one tier).
 export const schoolLevelSchema = z.enum(["PRIMARY_JS", "SENIOR_SCHOOL", "TERTIARY"]);
+// Game.schoolLevel is more granular: within a PRIMARY_JS championship, each
+// event is individually Primary or JS; Senior School/Tertiary championships
+// have exactly one valid value each, so the field is hidden and auto-set.
+export const gameSchoolLevelSchema = z.enum(["PRIMARY", "JS", "SENIOR_SCHOOL", "TERTIARY"]);
 export const genderSchema = z.enum(["BOYS", "GIRLS", "MIXED"]);
 export const participantStatusSchema = z.enum(["REGISTERED", "CONFIRMED_IN_CALL_ROOM", "DISQUALIFIED"]);
 
@@ -65,7 +71,7 @@ export const gameCreateSchema = z.object({
   name: z.string().min(2).max(200),
   category: gameCategorySchema,
   gender: genderSchema,
-  schoolLevel: schoolLevelSchema,
+  schoolLevel: gameSchoolLevelSchema,
   isTimed: z.boolean(),
   maxQualifiers: z.number().int().min(1).max(50).default(5),
   raceType: z.string().max(100).nullable().optional(),
@@ -148,6 +154,7 @@ export const paymentInitializeSchema = z.object({
   teamId: z.string().uuid().optional(),
   teamName: z.string().min(1).max(200).optional(),
   teamCode: z.string().min(1).max(50).optional(),
+  teamGender: genderSchema.optional(),
   contactEmail: z.string().email().optional(),
   contactName: z.string().max(200).optional(),
   contactPhone: z.string().max(20).optional(),
@@ -163,6 +170,7 @@ export const tournamentTeamSchema = z.object({
   championshipId: z.string().uuid(),
   name: z.string().min(1).max(200),
   teamCode: z.string().min(1).max(50),
+  gender: genderSchema,
   teamColor: z.string().max(30).nullable().optional(),
   contactName: z.string().max(200).nullable().optional(),
   contactEmail: z.string().email().nullable().optional(),

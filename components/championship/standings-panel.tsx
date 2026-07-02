@@ -6,7 +6,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PanelErrorBoundary } from "@/components/error-boundary";
 import { apiGet } from "@/lib/api-client";
-import { SCHOOL_LEVELS } from "@/lib/school-levels";
+import { GAME_SCHOOL_LEVELS } from "@/lib/school-levels";
 
 interface RankingRow {
   schoolId: string;
@@ -22,7 +22,7 @@ interface RankingRow {
   position: number;
 }
 
-const SCHOOL_LEVEL_FILTERS = [{ value: "OVERALL", label: "Overall" }, ...SCHOOL_LEVELS];
+const SCHOOL_LEVEL_FILTERS = [{ value: "OVERALL", label: "Overall" }, ...GAME_SCHOOL_LEVELS];
 
 function StandingsTable({ championshipId }: { championshipId: string }) {
   const [schoolLevel, setSchoolLevel] = React.useState("OVERALL");

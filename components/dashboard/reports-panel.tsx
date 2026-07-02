@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiGet } from "@/lib/api-client";
-import { SCHOOL_LEVELS } from "@/lib/school-levels";
+import { GAME_SCHOOL_LEVELS } from "@/lib/school-levels";
 
 interface RankingRow {
   position: number;
@@ -17,7 +17,7 @@ interface RankingRow {
   grandTotal: number;
 }
 
-const SCHOOL_LEVEL_FILTERS = [{ value: "OVERALL", label: "Overall" }, ...SCHOOL_LEVELS];
+const SCHOOL_LEVEL_FILTERS = [{ value: "OVERALL", label: "Overall" }, ...GAME_SCHOOL_LEVELS];
 
 export function ReportsPanel({ championshipId, championshipName }: { championshipId: string; championshipName: string }) {
   const [schoolLevel, setSchoolLevel] = React.useState("OVERALL");

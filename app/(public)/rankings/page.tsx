@@ -7,7 +7,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PanelErrorBoundary } from "@/components/error-boundary";
 import { apiGet } from "@/lib/api-client";
-import { SCHOOL_LEVELS } from "@/lib/school-levels";
+import { GAME_SCHOOL_LEVELS } from "@/lib/school-levels";
 
 interface ChampionshipOption {
   id: string;
@@ -28,7 +28,7 @@ interface RankingRow {
   position: number;
 }
 
-const SCHOOL_LEVEL_FILTERS = [{ value: "OVERALL", label: "Overall" }, ...SCHOOL_LEVELS];
+const SCHOOL_LEVEL_FILTERS = [{ value: "OVERALL", label: "Overall" }, ...GAME_SCHOOL_LEVELS];
 
 function RankingsExplorer() {
   const [championshipId, setChampionshipId] = React.useState<string>("");

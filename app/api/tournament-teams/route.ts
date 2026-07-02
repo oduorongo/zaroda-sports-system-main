@@ -47,6 +47,7 @@ export async function POST(request: Request) {
             championshipId: input.championshipId,
             name: input.name,
             teamCode: input.teamCode,
+            gender: input.gender,
             teamColor: input.teamColor ?? null,
             contactName: input.contactName ?? null,
             contactEmail: input.contactEmail ?? null,

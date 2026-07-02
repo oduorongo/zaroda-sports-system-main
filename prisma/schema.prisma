@@ -40,7 +40,14 @@ enum Level {
   NATIONAL
 }
 
+// Championship.schoolLevel only ever uses PRIMARY_JS / SENIOR_SCHOOL / TERTIARY
+// (the three subscription/pricing tiers). Game.schoolLevel additionally allows
+// the granular PRIMARY / JS values, used only within a PRIMARY_JS championship
+// to record which of the two a specific event is for; enforced at the
+// application layer via separate Zod schemas per model (lib/validations.ts).
 enum SchoolLevel {
+  PRIMARY
+  JS
   PRIMARY_JS
   SENIOR_SCHOOL
   TERTIARY
@@ -210,6 +217,7 @@ model TournamentTeam {
   championshipId String
   name           String
   teamCode       String
+  gender         Gender   @default(MIXED)
   teamColor      String?
   contactName    String?
   contactEmail   String?

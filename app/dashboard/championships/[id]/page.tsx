@@ -26,6 +26,7 @@ export default async function DashboardChampionshipDetailPage({ params }: { para
       championshipId={championship.id}
       name={championship.name}
       category={championship.category}
+      schoolLevel={championship.schoolLevel}
       isPublished={championship.isPublished}
     />
   );

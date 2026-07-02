@@ -302,7 +302,10 @@ export function pointsForPosition(position: number): number {
   return POSITION_POINTS[position] ?? 0;
 }
 
-export type SchoolLevelCategory = "PRIMARY_JS" | "SENIOR_SCHOOL" | "TERTIARY";
+// Matches Game.schoolLevel: within a PRIMARY_JS championship, each event is
+// individually PRIMARY or JS; SENIOR_SCHOOL/TERTIARY championships only ever
+// produce placings at that one matching level.
+export type SchoolLevelCategory = "PRIMARY" | "JS" | "SENIOR_SCHOOL" | "TERTIARY";
 
 export interface EventPlacing {
   schoolId: string;
@@ -311,7 +314,8 @@ export interface EventPlacing {
 }
 
 export interface LevelStandings {
-  PRIMARY_JS: Map<string, number>;
+  PRIMARY: Map<string, number>;
+  JS: Map<string, number>;
   SENIOR_SCHOOL: Map<string, number>;
   TERTIARY: Map<string, number>;
   OVERALL: Map<string, number>;
@@ -320,7 +324,8 @@ export interface LevelStandings {
 /** Aggregates event placings into per-school-level standings plus a combined OVERALL table. */
 export function computeSchoolLevelStandings(placings: EventPlacing[]): LevelStandings {
   const standings: LevelStandings = {
-    PRIMARY_JS: new Map(),
+    PRIMARY: new Map(),
+    JS: new Map(),
     SENIOR_SCHOOL: new Map(),
     TERTIARY: new Map(),
     OVERALL: new Map(),
