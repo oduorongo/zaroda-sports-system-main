@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { UserPlus } from "lucide-react";
+import { UserPlus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { participantCreateSchema, type ParticipantCreateInput } from "@/lib/validations";
-import { apiGet, apiPost } from "@/lib/api-client";
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client";
 
 interface GameOption {
   id: string;
@@ -38,10 +38,113 @@ interface ParticipantRow {
   tournamentTeam: { name: string } | null;
 }
 
+interface EditForm {
+  firstName: string;
+  lastName: string;
+  gender: string;
+  bibNumber: string;
+}
+
+function EditParticipantDialog({
+  participant,
+  onClose,
+  onSaved,
+}: {
+  participant: ParticipantRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = React.useState<EditForm>({
+    firstName: participant.firstName,
+    lastName: participant.lastName,
+    gender: participant.gender,
+    bibNumber: participant.bibNumber.toString(),
+  });
+  const [saving, setSaving] = React.useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await apiPatch(`/api/participants/${participant.id}`, {
+        firstName: form.firstName,
+        lastName: form.lastName,
+        gender: form.gender,
+        bibNumber: Number(form.bibNumber),
+      });
+      toast.success("Participant updated");
+      onSaved();
+      onClose();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update participant");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit participant</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="edit-firstName">First name</Label>
+              <Input
+                id="edit-firstName"
+                className="mt-1.5"
+                value={form.firstName}
+                onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-lastName">Last name</Label>
+              <Input
+                id="edit-lastName"
+                className="mt-1.5"
+                value={form.lastName}
+                onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Gender</Label>
+              <Select value={form.gender} onValueChange={(v) => setForm((f) => ({ ...f, gender: v }))}>
+                <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="BOYS">Boys</SelectItem>
+                  <SelectItem value="GIRLS">Girls</SelectItem>
+                  <SelectItem value="MIXED">Mixed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="edit-bibNumber">Bib number</Label>
+              <Input
+                id="edit-bibNumber"
+                type="number"
+                className="mt-1.5"
+                value={form.bibNumber}
+                onChange={(e) => setForm((f) => ({ ...f, bibNumber: e.target.value }))}
+              />
+            </div>
+          </div>
+          <Button className="w-full" disabled={saving} onClick={save}>
+            {saving ? "Saving..." : "Save changes"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ParticipantsPanel({ championshipId }: { championshipId: string }) {
   const queryClient = useQueryClient();
   const [gameId, setGameId] = React.useState<string>("");
   const [open, setOpen] = React.useState(false);
+  const [editingParticipant, setEditingParticipant] = React.useState<ParticipantRow | null>(null);
 
   const { data: gamesData } = useQuery({
     queryKey: ["games", championshipId],
@@ -57,6 +160,10 @@ export function ParticipantsPanel({ championshipId }: { championshipId: string }
     queryFn: () => apiGet<{ participants: ParticipantRow[] }>(`/api/participants?gameId=${gameId}`),
     enabled: !!gameId,
   });
+
+  function refetchParticipants() {
+    queryClient.invalidateQueries({ queryKey: ["participants", gameId] });
+  }
 
   const {
     register,
@@ -78,12 +185,27 @@ export function ParticipantsPanel({ championshipId }: { championshipId: string }
     mutationFn: (values: ParticipantCreateInput) => apiPost("/api/participants", values),
     onSuccess: () => {
       toast.success("Participant registered");
-      queryClient.invalidateQueries({ queryKey: ["participants", gameId] });
+      refetchParticipants();
       setOpen(false);
       reset({ championshipId, gameId, gender: "BOYS" });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to register participant"),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiDelete(`/api/participants/${id}`),
+    onSuccess: () => {
+      toast.success("Participant removed");
+      refetchParticipants();
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to remove participant"),
+  });
+
+  function confirmDelete(p: ParticipantRow) {
+    if (window.confirm(`Remove ${p.firstName} ${p.lastName} (bib ${p.bibNumber})?`)) {
+      deleteMutation.mutate(p.id);
+    }
+  }
 
   return (
     <Card>
@@ -183,6 +305,7 @@ export function ParticipantsPanel({ championshipId }: { championshipId: string }
                 <TableHead>Institution</TableHead>
                 <TableHead>Gender</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -193,17 +316,33 @@ export function ParticipantsPanel({ championshipId }: { championshipId: string }
                   <TableCell>{p.school?.name ?? p.tournamentTeam?.name ?? "-"}</TableCell>
                   <TableCell>{p.gender}</TableCell>
                   <TableCell>{p.status.replace(/_/g, " ")}</TableCell>
+                  <TableCell className="text-right">
+                    <Button size="icon" variant="ghost" onClick={() => setEditingParticipant(p)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => confirmDelete(p)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
               {(participantsData?.participants ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted">No participants registered yet.</TableCell>
+                  <TableCell colSpan={6} className="text-center text-muted">No participants registered yet.</TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
         )}
       </CardContent>
+
+      {editingParticipant && (
+        <EditParticipantDialog
+          participant={editingParticipant}
+          onClose={() => setEditingParticipant(null)}
+          onSaved={refetchParticipants}
+        />
+      )}
     </Card>
   );
 }

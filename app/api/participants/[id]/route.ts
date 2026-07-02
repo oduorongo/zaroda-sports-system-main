@@ -3,10 +3,14 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { withAudit } from "@/lib/audit";
 import { requireChampionshipAccess, toErrorResponse } from "@/lib/authorize";
-import { participantStatusSchema, timeInputSchema } from "@/lib/validations";
+import { participantStatusSchema, timeInputSchema, genderSchema } from "@/lib/validations";
 import { parseTimeToSeconds } from "@/lib/scoring";
 
 const participantUpdateSchema = z.object({
+  firstName: z.string().min(1).max(100).optional(),
+  lastName: z.string().min(1).max(100).optional(),
+  gender: genderSchema.optional(),
+  bibNumber: z.number().int().positive().optional(),
   status: participantStatusSchema.optional(),
   timeInput: timeInputSchema.optional(),
   score: z.number().optional(),
@@ -27,6 +31,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const input = participantUpdateSchema.parse(body);
 
     const data: Record<string, unknown> = {};
+    if (input.firstName !== undefined) data.firstName = input.firstName;
+    if (input.lastName !== undefined) data.lastName = input.lastName;
+    if (input.gender !== undefined) data.gender = input.gender;
+    if (input.bibNumber !== undefined) data.bibNumber = input.bibNumber;
     if (input.status !== undefined) data.status = input.status;
     if (input.timeInput !== undefined) data.timeTaken = parseTimeToSeconds(input.timeInput);
     if (input.score !== undefined) data.score = input.score;
@@ -47,6 +55,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     return NextResponse.json({ participant: updated });
   } catch (error) {
+    if (error instanceof Error && error.message.includes("Unique constraint")) {
+      return NextResponse.json({ error: "That bib number is already in use in this championship" }, { status: 409 });
+    }
     const { body, status } = toErrorResponse(error);
     return NextResponse.json(body, { status });
   }

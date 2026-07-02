@@ -3,14 +3,14 @@
 import * as React from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, FileDown } from "lucide-react";
+import { Plus, FileDown, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { apiGet, apiPost } from "@/lib/api-client";
+import { apiGet, apiPost, apiDelete } from "@/lib/api-client";
 
 interface SchoolOption {
   id: string;
@@ -57,6 +57,27 @@ export function BibRangesPanel({ championshipId }: { championshipId: string }) {
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to save range"),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiDelete(`/api/bib-ranges/${id}`),
+    onSuccess: () => {
+      toast.success("Bib range removed");
+      queryClient.invalidateQueries({ queryKey: ["bib-ranges", championshipId] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to remove range"),
+  });
+
+  function editRange(range: RangeRow) {
+    setSchoolId(range.schoolId);
+    setRangeStart(range.rangeStart.toString());
+    setRangeEnd(range.rangeEnd.toString());
+  }
+
+  function confirmDelete(range: RangeRow) {
+    if (window.confirm(`Remove the bib range for ${range.school.name}?`)) {
+      deleteMutation.mutate(range.id);
+    }
+  }
 
   async function exportChecklist() {
     const { default: jsPDF } = await import("jspdf");
@@ -106,7 +127,8 @@ export function BibRangesPanel({ championshipId }: { championshipId: string }) {
             disabled={!schoolId || !rangeStart || !rangeEnd || createMutation.isPending}
             onClick={() => createMutation.mutate()}
           >
-            <Plus className="h-4 w-4" /> Save range
+            <Plus className="h-4 w-4" />{" "}
+            {(rangesData?.ranges ?? []).some((r) => r.schoolId === schoolId) ? "Update range" : "Save range"}
           </Button>
         </div>
 
@@ -119,6 +141,7 @@ export function BibRangesPanel({ championshipId }: { championshipId: string }) {
                 <TableHead>Range start</TableHead>
                 <TableHead>Range end</TableHead>
                 <TableHead>Slots</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -128,11 +151,19 @@ export function BibRangesPanel({ championshipId }: { championshipId: string }) {
                   <TableCell>{r.rangeStart}</TableCell>
                   <TableCell>{r.rangeEnd}</TableCell>
                   <TableCell>{r.rangeEnd - r.rangeStart + 1}</TableCell>
+                  <TableCell className="text-right">
+                    <Button size="icon" variant="ghost" onClick={() => editRange(r)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => confirmDelete(r)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
               {(rangesData?.ranges ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted">No bib ranges allocated yet.</TableCell>
+                  <TableCell colSpan={5} className="text-center text-muted">No bib ranges allocated yet.</TableCell>
                 </TableRow>
               )}
             </TableBody>

@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { tournamentTeamSchema, type TournamentTeamInput } from "@/lib/validations";
-import { apiGet, apiPost } from "@/lib/api-client";
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client";
 
 interface TeamRow {
   id: string;
@@ -29,9 +29,14 @@ interface TeamRow {
 
 const GENDERS = ["BOYS", "GIRLS", "MIXED"];
 
+function emptyDefaults(championshipId: string): TournamentTeamInput {
+  return { championshipId, name: "", teamCode: "", gender: "MIXED" };
+}
+
 export function TeamsPanel({ championshipId }: { championshipId: string }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["tournament-teams", championshipId],
@@ -47,19 +52,55 @@ export function TeamsPanel({ championshipId }: { championshipId: string }) {
     formState: { errors },
   } = useForm<TournamentTeamInput>({
     resolver: zodResolver(tournamentTeamSchema),
-    defaultValues: { championshipId, gender: "MIXED" },
+    defaultValues: emptyDefaults(championshipId),
   });
 
-  const createMutation = useMutation({
-    mutationFn: (values: TournamentTeamInput) => apiPost("/api/tournament-teams", values),
+  function openCreate() {
+    setEditingId(null);
+    reset(emptyDefaults(championshipId));
+    setOpen(true);
+  }
+
+  function openEdit(team: TeamRow) {
+    setEditingId(team.id);
+    reset({
+      championshipId,
+      name: team.name,
+      teamCode: team.teamCode,
+      gender: team.gender as TournamentTeamInput["gender"],
+      teamColor: team.teamColor,
+      contactName: team.contactName,
+      contactEmail: team.contactEmail,
+      contactPhone: team.contactPhone,
+    });
+    setOpen(true);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: (values: TournamentTeamInput) =>
+      editingId ? apiPatch(`/api/tournament-teams/${editingId}`, values) : apiPost("/api/tournament-teams", values),
     onSuccess: () => {
-      toast.success("Team added");
+      toast.success(editingId ? "Team updated" : "Team added");
       queryClient.invalidateQueries({ queryKey: ["tournament-teams", championshipId] });
       setOpen(false);
-      reset({ championshipId, gender: "MIXED" });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to add team"),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to save team"),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiDelete(`/api/tournament-teams/${id}`),
+    onSuccess: () => {
+      toast.success("Team deleted");
+      queryClient.invalidateQueries({ queryKey: ["tournament-teams", championshipId] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to delete team"),
+  });
+
+  function confirmDelete(team: TeamRow) {
+    if (window.confirm(`Delete "${team.name}"? This fails if the team already has participants or fixtures.`)) {
+      deleteMutation.mutate(team.id);
+    }
+  }
 
   return (
     <Card>
@@ -70,15 +111,15 @@ export function TeamsPanel({ championshipId }: { championshipId: string }) {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm">
+            <Button size="sm" onClick={openCreate}>
               <Plus className="h-4 w-4" /> Add team
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add a team</DialogTitle>
+              <DialogTitle>{editingId ? "Edit team" : "Add a team"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit((v) => createMutation.mutate(v))} className="space-y-4">
+            <form onSubmit={handleSubmit((v) => saveMutation.mutate(v))} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="team-name">Name</Label>
@@ -127,8 +168,8 @@ export function TeamsPanel({ championshipId }: { championshipId: string }) {
                 {errors.contactEmail && <p className="mt-1 text-sm text-red-400">{errors.contactEmail.message}</p>}
               </div>
 
-              <Button type="submit" className="w-full" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Adding..." : "Add team"}
+              <Button type="submit" className="w-full" disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? "Saving..." : editingId ? "Save changes" : "Add team"}
               </Button>
             </form>
           </DialogContent>
@@ -146,7 +187,15 @@ export function TeamsPanel({ championshipId }: { championshipId: string }) {
                 {team.contactName ? ` - ${team.contactName}` : ""}
               </p>
             </div>
-            {team.teamColor && <Badge variant="secondary">{team.teamColor}</Badge>}
+            <div className="flex items-center gap-2">
+              {team.teamColor && <Badge variant="secondary">{team.teamColor}</Badge>}
+              <Button size="icon" variant="ghost" onClick={() => openEdit(team)}>
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button size="icon" variant="ghost" onClick={() => confirmDelete(team)}>
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
           </div>
         ))}
       </CardContent>

@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { gameCreateSchema, type GameCreateInput } from "@/lib/validations";
-import { apiGet, apiPost } from "@/lib/api-client";
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client";
 import { GAME_SCHOOL_LEVELS, gameSchoolLevelLabel } from "@/lib/school-levels";
 
 interface GameRow {
@@ -39,6 +39,19 @@ const BALL_SPORTS = ["FOOTBALL", "BASKETBALL", "VOLLEYBALL", "HANDBALL", "RUGBY"
 // one valid game-level value each, so the field is hidden and auto-set.
 const PRIMARY_JS_GAME_LEVELS = GAME_SCHOOL_LEVELS.filter((l) => l.value === "PRIMARY" || l.value === "JS");
 
+function emptyDefaults(category: string, championshipId: string, needsLevelChoice: boolean, championshipSchoolLevel: string): GameCreateInput {
+  return {
+    championshipId,
+    name: "",
+    category: category as GameCreateInput["category"],
+    gender: "BOYS",
+    schoolLevel: needsLevelChoice ? "PRIMARY" : (championshipSchoolLevel as GameCreateInput["schoolLevel"]),
+    isTimed: category === "ATHLETICS",
+    sport: category === "BALL_GAMES" ? "FOOTBALL" : null,
+    maxQualifiers: 5,
+  };
+}
+
 export function GamesPanel({
   championshipId,
   category,
@@ -50,6 +63,7 @@ export function GamesPanel({
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
   const needsLevelChoice = championshipSchoolLevel === "PRIMARY_JS";
 
   const { data, isLoading } = useQuery({
@@ -66,28 +80,56 @@ export function GamesPanel({
     formState: { errors },
   } = useForm<GameCreateInput>({
     resolver: zodResolver(gameCreateSchema),
-    defaultValues: {
-      championshipId,
-      category: category as GameCreateInput["category"],
-      gender: "BOYS",
-      schoolLevel: needsLevelChoice ? "PRIMARY" : (championshipSchoolLevel as GameCreateInput["schoolLevel"]),
-      isTimed: category === "ATHLETICS",
-      sport: category === "BALL_GAMES" ? "FOOTBALL" : null,
-      maxQualifiers: 5,
-    },
+    defaultValues: emptyDefaults(category, championshipId, needsLevelChoice, championshipSchoolLevel),
   });
   const isBallGames = watch("category") === "BALL_GAMES";
 
-  const createMutation = useMutation({
-    mutationFn: (values: GameCreateInput) => apiPost("/api/games", values),
+  function openCreate() {
+    setEditingId(null);
+    reset(emptyDefaults(category, championshipId, needsLevelChoice, championshipSchoolLevel));
+    setOpen(true);
+  }
+
+  function openEdit(game: GameRow) {
+    setEditingId(game.id);
+    reset({
+      championshipId,
+      name: game.name,
+      category: game.category as GameCreateInput["category"],
+      gender: game.gender as GameCreateInput["gender"],
+      schoolLevel: game.schoolLevel as GameCreateInput["schoolLevel"],
+      isTimed: game.isTimed,
+      sport: (game.sport as GameCreateInput["sport"]) ?? null,
+      maxQualifiers: game.maxQualifiers,
+    });
+    setOpen(true);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: (values: GameCreateInput) =>
+      editingId ? apiPatch(`/api/games/${editingId}`, values) : apiPost("/api/games", values),
     onSuccess: () => {
-      toast.success("Game added");
+      toast.success(editingId ? "Game updated" : "Game added");
       queryClient.invalidateQueries({ queryKey: ["games", championshipId] });
       setOpen(false);
-      reset();
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to add game"),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to save game"),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiDelete(`/api/games/${id}`),
+    onSuccess: () => {
+      toast.success("Game deleted");
+      queryClient.invalidateQueries({ queryKey: ["games", championshipId] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to delete game"),
+  });
+
+  function confirmDelete(game: GameRow) {
+    if (window.confirm(`Delete "${game.name}"? This also removes its participants, heats, and fixtures.`)) {
+      deleteMutation.mutate(game.id);
+    }
+  }
 
   return (
     <Card>
@@ -95,15 +137,15 @@ export function GamesPanel({
         <CardTitle>Games</CardTitle>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm">
+            <Button size="sm" onClick={openCreate}>
               <Plus className="h-4 w-4" /> Add game
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add a game</DialogTitle>
+              <DialogTitle>{editingId ? "Edit game" : "Add a game"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit((v) => createMutation.mutate(v))} className="space-y-4">
+            <form onSubmit={handleSubmit((v) => saveMutation.mutate(v))} className="space-y-4">
               <div>
                 <Label htmlFor="game-name">Name</Label>
                 <Input id="game-name" className="mt-1.5" {...register("name")} />
@@ -184,8 +226,8 @@ export function GamesPanel({
                   <input type="checkbox" {...register("isTimed")} /> Timed event (athletics track)
                 </label>
               </div>
-              <Button type="submit" className="w-full" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Adding..." : "Add game"}
+              <Button type="submit" className="w-full" disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? "Saving..." : editingId ? "Save changes" : "Add game"}
               </Button>
             </form>
           </DialogContent>
@@ -204,7 +246,15 @@ export function GamesPanel({
                 {game._count.participants} participants
               </p>
             </div>
-            <Badge variant={game.isTimed ? "secondary" : "outline"}>{game.isTimed ? "Timed" : "Scored"}</Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant={game.isTimed ? "secondary" : "outline"}>{game.isTimed ? "Timed" : "Scored"}</Badge>
+              <Button size="icon" variant="ghost" onClick={() => openEdit(game)}>
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button size="icon" variant="ghost" onClick={() => confirmDelete(game)}>
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
           </div>
         ))}
       </CardContent>
